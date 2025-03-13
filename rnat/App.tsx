@@ -6,11 +6,11 @@ import { AuthProvider, AuthContext } from './AuthContext.tsx';
 import LoginScreen from './LoginScreen';
 import RegisterScreen from './RegisterScreen';
 import HomeScreen from './HomeScreen';
+import BeatDetailsScreen from './BeatDetailsScreen';
 import { View, Text } from 'react-native';
 
 // Создаём стековый навигатор
 const Stack = createNativeStackNavigator();
-
 // Создаём нижний таб-навигатор
 const Tab = createBottomTabNavigator();
 
@@ -55,6 +55,10 @@ const AppContent = () => {
                         <Stack.Screen name="Register" component={RegisterScreen} />
                     </>
                 )}
+                <Stack.Screen
+                    name="BeatDetails"
+                    component={BeatDetailsScreen as React.ComponentType<any>} // Явное приведение типа
+                />
             </Stack.Navigator>
         </NavigationContainer>
     );
