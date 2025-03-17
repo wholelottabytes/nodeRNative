@@ -1,9 +1,8 @@
 import React, { useState, useContext } from 'react';
-import { View, Text, TextInput, Button, Alert, ActivityIndicator } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { View, Text, TextInput, Button, Alert, ActivityIndicator, StyleSheet } from 'react-native';
 import axios from 'axios';
-import { LoginScreenNavigationProp } from './type.ts'; // Импортируйте типы
-import { AuthContext } from './AuthContext'; // Импортируем AuthContext
+import { AuthContext } from './AuthContext';
+import { LoginScreenNavigationProp } from './type.ts';
 
 interface Props {
     navigation: LoginScreenNavigationProp;
@@ -14,37 +13,48 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     const [password, setPassword] = useState<string>('');
     const [isLoading, setIsLoading] = useState<boolean>(false);
 
-    // Используем контекст
     const authContext = useContext(AuthContext);
 
-    // Проверяем, что контекст не null
     if (!authContext) {
         throw new Error('AuthContext не был предоставлен');
     }
 
-    // Деструктурируем нужные методы из контекста
-    const { login } = authContext;
+    const { login, user, isAuthenticated } = authContext;
 
     const handleLogin = async () => {
-        if (!username || !password) {
+        const formattedUsername = username.trim().toLowerCase();
+        const trimmedPassword = password.trim();
+
+        if (!formattedUsername || !trimmedPassword) {
             Alert.alert('Ошибка', 'Пожалуйста, заполните все поля');
+            return;
+        }
+
+        if (trimmedPassword.length < 6) {
+            Alert.alert('Ошибка', 'Пароль должен содержать минимум 6 символов');
             return;
         }
 
         setIsLoading(true);
 
         try {
-            const response = await axios.post('http://192.168.8.12:5000/auth/login', { username, password });
-            await AsyncStorage.setItem('token', response.data.token);
-            await login(response.data.token); // Используем метод login из контекста
-            Alert.alert('Успешный вход!');
+            const response = await axios.post('http://192.168.8.12:5000/auth/login', { 
+                username: formattedUsername, 
+                password: trimmedPassword 
+            });
+
+            const { token, user } = response.data; // Получаем данные из ответа
+            await login(token, user); // Передаем user в AuthContext
+
+            Alert.alert('Успешный вход!', `Добро пожаловать, ${user.username}`);
         } catch (error: any) {
+            console.log(error); 
             if (error.response) {
-                Alert.alert('Ошибка входа', error.response.data.message || 'Попробуйте снова');
+                Alert.alert('Ошибка входа', error.response.data.message || 'Неверные данные');
             } else if (error.request) {
-                Alert.alert('Ошибка', 'Сервер недоступен. Проверьте подключение к интернету');
+                Alert.alert('Ошибка', 'Проблемы с сервером, попробуйте позже');
             } else {
-                Alert.alert('Ошибка', 'Что-то пошло не так');
+                Alert.alert('Ошибка', 'Неизвестная ошибка, попробуйте снова');
             }
         } finally {
             setIsLoading(false);
@@ -52,32 +62,63 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     };
 
     return (
-        <View style={{ flex: 1, justifyContent: 'center', padding: 20 }}>
-            <Text>Имя пользователя:</Text>
-            <TextInput
-                style={{ borderBottomWidth: 1, marginBottom: 10 }}
-                value={username}
-                onChangeText={setUsername}
-                placeholder="Введите имя пользователя"
-            />
-            <Text>Пароль:</Text>
-            <TextInput
-                style={{ borderBottomWidth: 1, marginBottom: 10 }}
-                secureTextEntry
-                value={password}
-                onChangeText={setPassword}
-                placeholder="Введите пароль"
-            />
-            {isLoading ? (
-                <ActivityIndicator size="large" color="#0000ff" />
+        <View style={styles.container}>
+            {isAuthenticated ? (
+                <Text style={styles.welcomeText}>Добро пожаловать, {user?.username}!</Text>
             ) : (
                 <>
-                    <Button title="Войти" onPress={handleLogin} />
-                    <Button title="Регистрация" onPress={() => navigation.navigate('Register')} />
+                    <Text style={styles.label}>Имя пользователя:</Text>
+                    <TextInput
+                        style={styles.input}
+                        value={username}
+                        onChangeText={setUsername}
+                        placeholder="Введите имя пользователя"
+                        autoCapitalize="none"
+                    />
+                    <Text style={styles.label}>Пароль:</Text>
+                    <TextInput
+                        style={styles.input}
+                        secureTextEntry
+                        value={password}
+                        onChangeText={setPassword}
+                        placeholder="Введите пароль"
+                    />
+                    {isLoading ? (
+                        <ActivityIndicator size="large" color="#0000ff" />
+                    ) : (
+                        <>
+                            <Button title="Войти" onPress={handleLogin} />
+                            <Button title="Регистрация" onPress={() => navigation.navigate('Register')} />
+                        </>
+                    )}
                 </>
             )}
         </View>
     );
 };
+
+const styles = StyleSheet.create({
+    container: {
+        flex: 1,
+        justifyContent: 'center',
+        padding: 20,
+    },
+    label: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 5,
+    },
+    input: {
+        borderBottomWidth: 1,
+        marginBottom: 15,
+        paddingVertical: 5,
+        fontSize: 16,
+    },
+    welcomeText: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
+});
 
 export default LoginScreen;

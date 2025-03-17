@@ -1,59 +1,50 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, TextInput, FlatList, ImageBackground, TouchableOpacity, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { HomeScreenNavigationProp } from './type.ts'; // Импортируем тип
+import { Image } from 'react-native';
+
+// Определяем тип для битов
+interface Beat {
+    _id: string;            // Используем _id, так как в ответе от сервера это поле
+    imageUrl: string;       // Путь к изображению
+    audioUrl: string;       // Путь к аудиофайлу
+    title: string;
+    author: string;
+    price: number;
+    description: string;
+    tags: string[];
+    likes: number;
+    user: {
+        _id: string;
+        username: string;
+    };
+}
+
 
 const categories = ['Trending', 'Recent', 'Popular', 'Top'];
-const items = [
-    {
-        id: '1',
-        image: require('./assets/1.jpg'),
-        title: 'Place a bid',
-        author: 'Author1',
-        price: 50,
-        description: 'This is a great beat!',
-        tags: ['Hip-Hop', 'Trap'],
-        likes: 120, // Добавляем лайки
-        path: 'b',
-    },
-    {
-        id: '2',
-        image: require('./assets/2.jpg'),
-        title: 'Place a bid',
-        author: 'Author2',
-        price: 60,
-        description: 'Amazing beat for your track!',
-        tags: ['Pop', 'EDM'],
-        likes: 95,
-        path: 'b',
-    },
-    {
-        id: '3',
-        image: require('./assets/1.jpg'),
-        title: 'Place a bid',
-        author: 'Author3',
-        price: 70,
-        description: 'Perfect beat for rap!',
-        tags: ['Rap', 'Drill'],
-        likes: 150,
-        path: 'b',
-    },
-    {
-        id: '4',
-        image: require('./assets/2.jpg'),
-        title: 'Place a bid',
-        author: 'Author4',
-        price: 80,
-        description: 'Chill beat for your mood!',
-        tags: ['Lo-fi', 'Chill'],
-        likes: 200,
-        path: 'b',
-    },
-];
 
 const HomeScreen = () => {
     const [selectedCategory, setSelectedCategory] = useState('Trending');
+    const [beats, setBeats] = useState<Beat[]>([]); // Указываем тип данных в состоянии
     const navigation = useNavigation<HomeScreenNavigationProp>(); // Используем тип
+
+    useEffect(() => {
+        console.log('useEffect started');
+        fetch('http://192.168.8.12:5000/beats/')
+            .then((response) => {
+                console.log('Response received');
+                return response.json();
+            })
+            .then((data) => {
+                console.log('Data parsed');
+                setBeats(data);
+                console.log(data);
+            })
+            .catch((error) => {
+                console.error('Ошибка при получении битов:', error);
+            });
+    }, []);
 
     return (
         <View style={styles.container}>
@@ -82,24 +73,29 @@ const HomeScreen = () => {
             </View>
 
             <Text style={styles.header}>Featured items</Text>
-
             {/* Featured Items */}
             <View style={styles.featuredList}>
+                
+            {beats.length > 0 ? (
                 <FlatList
-                    data={items}
+                    data={beats}  // Используем полученные данные
                     horizontal
                     showsHorizontalScrollIndicator={false}
-                    keyExtractor={(item) => item.id}
+                    keyExtractor={(item, index) => item._id ? item._id.toString() : index.toString()}
                     renderItem={({ item }) => (
                         <TouchableOpacity onPress={() => navigation.navigate('BeatDetails', { beat: item })}>
-                            <ImageBackground source={item.image} style={styles.card}>
+                            <Image source={{ uri: `http://192.168.8.12:5000/${item.imageUrl}` }} style={styles.card}></Image> 
                                 <View style={styles.button}>
                                     <Text style={styles.buttonText}>{item.title} →</Text>
                                 </View>
-                            </ImageBackground>
+                                
+                                
                         </TouchableOpacity>
                     )}
                 />
+            ) : (
+                <Text>Загрузка...</Text>
+            )}
             </View>
             <Text style={styles.header}>The most popular</Text>
         </View>

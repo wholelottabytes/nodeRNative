@@ -8,15 +8,19 @@ export type RootStackParamList = {
     Main: undefined; // Основной экран, без параметров
     BeatDetails: {
         beat: {
-            id: string;
-            image: any;
+            _id: string;            // Используем _id, так как в ответе от сервера это поле
+            imageUrl: string;       // Путь к изображению
+            audioUrl: string;       // Путь к аудиофайлу
             title: string;
             author: string;
             price: number;
             description: string;
             tags: string[];
             likes: number;
-            path: any;
+            user: {
+                _id: string;
+                username: string;
+    };
         };
     }; // Экран с подробным описанием бита
 };

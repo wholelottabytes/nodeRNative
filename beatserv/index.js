@@ -2,8 +2,10 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
+const path = require('path');
 
 const authRoutes = require("./routes/authRoutes");
+const beatRoutes = require("./routes/beatRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -19,6 +21,8 @@ app.use(express.json());
 app.get("/", (req, res) => {
     res.send("success");
 });
+app.use('/assets', express.static(path.join(__dirname, 'assets')));
 app.use("/auth", authRoutes);
+app.use("/beats", beatRoutes);
 
 app.listen(PORT, () => console.log(`Сервер запущен на порту ${PORT}`));
