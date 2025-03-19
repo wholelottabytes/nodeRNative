@@ -16,7 +16,6 @@ export type RootStackParamList = {
             price: number;
             description: string;
             tags: string[];
-            likes: number;
             user: {
                 _id: string;
                 username: string;

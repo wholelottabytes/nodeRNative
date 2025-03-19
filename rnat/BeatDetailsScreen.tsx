@@ -1,10 +1,16 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Button, Title, Paragraph } from 'react-native-paper';
-import SoundPlayer from 'react-native-sound-player';
+import Video, { OnLoadData, OnProgressData } from 'react-native-video';
 import { Star } from 'react-native-feather';
 import { BeatDetailsScreenProps } from './type';
+
+// Определяем собственный тип для рефа Video
+interface VideoRefType {
+  seek: (time: number) => void;
+  // Можно добавить и другие методы, если они нужны (pause, resume, etc.)
+}
 
 const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation: _navigation }) => {
   const { beat } = route.params;
@@ -13,70 +19,51 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
   const [duration, setDuration] = useState(0);
   const [rating, setRating] = useState(0);
 
-  // Загружаем аудиофайл при монтировании
-  useEffect(() => {
-    try {
-      SoundPlayer.loadSoundFile(beat.audioUrl, 'mp3');
-      SoundPlayer.getInfo()
-        .then(info => {
-          setDuration(info.duration);
-          setCurrentTime(info.currentTime);
-        })
-        .catch(e => console.log('Ошибка получения информации о звуке', e));
-    } catch (e) {
-      console.log('Ошибка загрузки аудио', e);
-    }
-    return () => {
-      try {
-        SoundPlayer.stop();
-      } catch (e) {
-        // Игнорируем ошибки
-      }
-    };
-  }, [beat.audioUrl]);
+  // Используем реф с собственным типом
+  const videoRef = useRef<VideoRefType | null>(null);
 
-  // Обновляем время каждые 500 мс при воспроизведении
-  useEffect(() => {
-    let interval: NodeJS.Timeout;
-    if (isPlaying) {
-      interval = setInterval(async () => {
-        try {
-          const info = await SoundPlayer.getInfo();
-          setCurrentTime(info.currentTime);
-        } catch (e) {
-          console.log('Ошибка получения времени', e);
-        }
-      }, 500);
-    }
-    return () => clearInterval(interval);
-  }, [isPlaying]);
-
-  const togglePlay = () => {
-    try {
-      if (isPlaying) {
-        SoundPlayer.stop();
-        setIsPlaying(false);
-        setCurrentTime(0);
-      } else {
-        SoundPlayer.playSoundFile(beat.audioUrl, 'mp3');
-        setIsPlaying(true);
-      }
-    } catch (e) {
-      console.log('Ошибка воспроизведения аудио', e);
-    }
+  // Обработчик загрузки аудио (получение длительности)
+  const handleLoad = (data: OnLoadData) => {
+    setDuration(data.duration);
   };
 
-  const handleSliderChange = async (value: number) => {
-    try {
-      await SoundPlayer.seek(value);
+  // Обновление текущего времени
+  const handleProgress = (data: OnProgressData) => {
+    setCurrentTime(data.currentTime);
+  };
+
+  // Обработка завершения воспроизведения
+  const handleEnd = () => {
+    setIsPlaying(false);
+    setCurrentTime(0);
+  };
+
+  const togglePlay = () => {
+    setIsPlaying(prev => !prev);
+  };
+
+  const handleSliderChange = (value: number) => {
+    if (videoRef.current) {
+      videoRef.current.seek(value);
       setCurrentTime(value);
-    } catch (e) {
-      console.log('Ошибка перемотки', e);
     }
   };
 
   return (
     <View style={styles.container}>
+      {/* Скрытый компонент Video для аудио */}
+      <Video
+        ref={videoRef as React.RefObject<any>}
+        source={{ uri: `http://192.168.8.12:5000/${beat.audioUrl}` }}
+        paused={!isPlaying}
+        onLoad={handleLoad}
+        onProgress={handleProgress}
+        onEnd={handleEnd}
+        style={{ width: 0, height: 0 }}
+        playInBackground
+        playWhenInactive
+      />
+
       {/* Обложка альбома */}
       <View style={styles.albumArtContainer}>
         <Image
@@ -90,7 +77,6 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
         <Paragraph style={styles.author}>Автор: {beat.author}</Paragraph>
         <Paragraph style={styles.description}>{beat.description}</Paragraph>
         <Paragraph style={styles.tags}>Теги: {beat.tags.join(', ')}</Paragraph>
-        <Paragraph style={styles.likes}>Лайков: {beat.likes}</Paragraph>
         <View style={styles.ratingContainer}>
           {[1, 2, 3, 4, 5].map((star) => (
             <TouchableOpacity key={star} onPress={() => setRating(star)}>
@@ -179,12 +165,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     color: '#666',
     marginBottom: 10,
-  },
-  likes: {
-    fontSize: 14,
-    textAlign: 'center',
-    color: '#666',
-    marginBottom: 15,
   },
   ratingContainer: {
     flexDirection: 'row',
