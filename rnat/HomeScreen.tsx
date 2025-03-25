@@ -6,6 +6,7 @@ import { Image } from 'react-native';
 
 // Определяем тип для битов
 interface Beat {
+    createdAt: string | number | Date;
     _id: string;            // Используем _id, так как в ответе от сервера это поле
     imageUrl: string;       // Путь к изображению
     audioUrl: string;       // Путь к аудиофайлу
@@ -14,7 +15,6 @@ interface Beat {
     price: number;
     description: string;
     tags: string[];
-    likes: number;
     user: {
         _id: string;
         username: string;
@@ -84,12 +84,10 @@ const HomeScreen = () => {
                     keyExtractor={(item, index) => item._id ? item._id.toString() : index.toString()}
                     renderItem={({ item }) => (
                         <TouchableOpacity onPress={() => navigation.navigate('BeatDetails', { beat: item })}>
-                            <Image source={{ uri: `http://192.168.8.12:5000/${item.imageUrl}` }} style={styles.card}></Image> 
+                            <Image source={{ uri: `http://192.168.8.12:5000/${item.imageUrl}` }} style={styles.card}/> 
                                 <View style={styles.button}>
                                     <Text style={styles.buttonText}>{item.title} →</Text>
                                 </View>
-                                
-                                
                         </TouchableOpacity>
                     )}
                 />

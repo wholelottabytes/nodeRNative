@@ -14,6 +14,7 @@ interface VideoRefType {
 
 const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation: _navigation }) => {
   const { beat } = route.params;
+  console.log(beat);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -117,6 +118,9 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
               .toString()
               .padStart(2, '0')}`}
           </Text>
+          <Paragraph >
+  {beat.createdAt ? `Дата появления: ${new Date(beat.createdAt).toLocaleDateString()}` : ''}
+</Paragraph>
         </View>
       </View>
     </View>

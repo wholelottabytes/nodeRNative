@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Определяем типы для контекста
 interface User {
+    _id: string;
     username: string;
 }
 
@@ -49,12 +50,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
     // Вход
     const login = async (token: string, user: User) => {
-        await AsyncStorage.setItem('token', token);
-        await AsyncStorage.setItem('user', JSON.stringify(user));
+    console.log('Token:', token);
+    console.log('User при логине:', user);
+    await AsyncStorage.setItem('token', token);
+    await AsyncStorage.setItem('user', JSON.stringify(user));
 
-        setIsAuthenticated(true);
-        setUser(user);
-    };
+    setIsAuthenticated(true);
+    setUser(user);
+};
 
     // Выход
     const logout = async () => {

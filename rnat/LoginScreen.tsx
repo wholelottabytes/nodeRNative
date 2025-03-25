@@ -44,6 +44,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
             });
 
             const { token, user } = response.data; // Получаем данные из ответа
+            console.log('User при входе:', user);
             await login(token, user); // Передаем user в AuthContext
 
             Alert.alert('Успешный вход!', `Добро пожаловать, ${user.username}`);

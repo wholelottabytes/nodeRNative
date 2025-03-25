@@ -7,15 +7,24 @@ const router = express.Router();
 const SECRET_KEY = process.env.JWT_SECRET;
 
 // Регистрация пользователя
+// Регистрация пользователя
 router.post("/register", async (req, res) => {
     try {
-        const { username, password } = req.body;
+        const { username, password, userPhoto, balance, description } = req.body;
 
         const existingUser = await User.findOne({ username });
         if (existingUser) return res.status(400).json({ message: "Пользователь уже существует" });
 
         const hashedPassword = await bcrypt.hash(password, 10);
-        const newUser = new User({ username, password: hashedPassword });
+
+        // Создаем нового пользователя с дополнительными полями
+        const newUser = new User({
+            username,
+            password: hashedPassword,
+            userPhoto: userPhoto || "", // Если не передано, оставляем пустое фото
+            balance: balance || 0, // Если не передано, баланс 0
+            description: description || "", // Если не передано, описание пустое
+        });
 
         await newUser.save();
         res.status(201).json({ message: "Регистрация успешна" });
@@ -24,6 +33,8 @@ router.post("/register", async (req, res) => {
     }
 });
 
+
+// Вход в систему
 // Вход в систему
 router.post("/login", async (req, res) => {
     try {
@@ -35,12 +46,27 @@ router.post("/login", async (req, res) => {
         const isMatch = await bcrypt.compare(password, user.password);
         if (!isMatch) return res.status(400).json({ message: "Неверный логин или пароль" });
 
+        // Создаем токен, используя _id пользователя
         const token = jwt.sign({ userId: user._id }, SECRET_KEY, { expiresIn: "1h" });
-        res.json({ token, user: { username: user.username } });
+
+        // Возвращаем _id, username и новые поля пользователя
+        res.json({
+            token,
+            user: {
+                _id: user._id,
+                username: user.username,
+                userPhoto: user.userPhoto,
+                balance: user.balance,
+                description: user.description,
+            }
+        });
+        console.log(user._id)
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: "Ошибка на сервере" });
     }
 });
+
+
 
 module.exports = router;
