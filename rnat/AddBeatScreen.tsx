@@ -2,10 +2,10 @@ import React, { useState, useContext } from 'react';
 import { ScrollView, StyleSheet, Alert } from 'react-native';
 import { TextInput, Button, Title } from 'react-native-paper';
 import { AuthContext } from './AuthContext';
+import config from './config';
 
 const AddBeatScreen: React.FC<any> = ({ navigation }) => {
   const { user } = useContext(AuthContext);
-  
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [price, setPrice] = useState('');
@@ -40,7 +40,7 @@ const AddBeatScreen: React.FC<any> = ({ navigation }) => {
     };
 
     try {
-      const response = await fetch('http://192.168.8.12:5000/beats/', {
+      const response = await fetch(`http://${config.serverIP}:5000/beats/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(newBeat)

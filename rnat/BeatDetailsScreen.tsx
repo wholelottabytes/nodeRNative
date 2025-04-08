@@ -5,6 +5,7 @@ import { Button, Title, Paragraph } from 'react-native-paper';
 import Video, { OnLoadData, OnProgressData } from 'react-native-video';
 import { Star } from 'react-native-feather';
 import { BeatDetailsScreenProps } from './type';
+import config from './config';
 
 // Определяем собственный тип для рефа Video
 interface VideoRefType {
@@ -55,7 +56,7 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
       {/* Скрытый компонент Video для аудио */}
       <Video
         ref={videoRef as React.RefObject<any>}
-        source={{ uri: `http://192.168.8.12:5000/${beat.audioUrl}` }}
+        source={{ uri: `http://${config.serverIP}:5000/${beat.audioUrl}` }}
         paused={!isPlaying}
         onLoad={handleLoad}
         onProgress={handleProgress}
@@ -68,7 +69,7 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
       {/* Обложка альбома */}
       <View style={styles.albumArtContainer}>
         <Image
-          source={{ uri: `http://192.168.8.12:5000/${beat.imageUrl}` }}
+          source={{ uri: `http://${config.serverIP}:5000/${beat.imageUrl}` }}
           style={styles.albumArt}
         />
       </View>

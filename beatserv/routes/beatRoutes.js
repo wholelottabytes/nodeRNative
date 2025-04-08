@@ -1,8 +1,52 @@
+require("dotenv").config();
 const express = require("express");
 const Beat = require("../models/Beat");
 const User = require("../models/User"); // Добавили импорт User
 const router = express.Router();
+const jwt = require('jsonwebtoken');
 
+const SECRET_KEY = process.env.JWT_SECRET;
+
+if (!SECRET_KEY) {
+    console.error("❌ JWT_SECRET не определён в переменных окружения!");
+}
+
+const authMiddleware = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
+        return res.status(401).json({ message: "Токен не предоставлен" });
+    }
+
+    const token = authHeader.split(" ")[1];
+
+    if (!token) {
+        return res.status(401).json({ message: "Неверный формат токена" });
+    }
+
+    try {
+        const decoded = jwt.verify(token, SECRET_KEY); // ✅ важно: SECRET_KEY должен быть определён
+        req.user = decoded; // decoded = { userId: ... }
+        next();
+    } catch (error) {
+        console.error("Ошибка верификации токена:", error.message);
+        return res.status(401).json({ message: "Неверный или просроченный токен" });
+    }
+};
+router.get("/my-beats", authMiddleware, async (req, res) => {
+    try {
+        const userId = req.user.userId; // Получаем ID пользователя из декодированного токена
+        const beats = await Beat.find({ user: userId }).populate("user", "username");
+        
+        if (!beats || beats.length === 0) {
+            return res.status(404).json({ error: "Нет битов для этого пользователя" });
+        }
+
+        res.json(beats);
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Ошибка сервера" });
+    }
+});
 // Получить все биты с данными пользователя
 router.get("/", async (req, res) => {
     try {

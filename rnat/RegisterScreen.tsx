@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, Button, Alert, ActivityIndicator } from 'react-native';
 import axios from 'axios';
 import { RegisterScreenNavigationProp } from './type.ts'; // Импортируйте типы
+import config from './config';
 
 interface Props {
     navigation: RegisterScreenNavigationProp;
@@ -21,7 +22,7 @@ const RegisterScreen: React.FC<Props> = ({ navigation }) => {
         setIsLoading(true);
 
         try {
-            await axios.post('http://192.168.8.12:5000/auth/register', { username, password });
+            await axios.post(`http://${config.serverIP}:5000/auth/register`, { username, password });
             Alert.alert('Регистрация успешна!');
             navigation.navigate('Login');
         } catch (error: any) {

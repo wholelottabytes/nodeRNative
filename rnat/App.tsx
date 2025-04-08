@@ -7,8 +7,9 @@ import LoginScreen from './LoginScreen';
 import RegisterScreen from './RegisterScreen';
 import HomeScreen from './HomeScreen';
 import BeatDetailsScreen from './BeatDetailsScreen';
-import AddBeatScreen from './AddBeatScreen';
+// import AddBeatScreen from './AddBeatScreen';
 import { View, Text } from 'react-native';
+import MyBeatsScreen from './MyBeatsScreen';
 
 // Заглушка для экранов, если потребуется
 const PlaceholderScreen = ({ title }: { title: string }) => (
@@ -19,12 +20,11 @@ const PlaceholderScreen = ({ title }: { title: string }) => (
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
-
 const MainTabs = () => (
   <Tab.Navigator screenOptions={{ headerShown: false }}>
     <Tab.Screen name="Home" component={HomeScreen} />
     <Tab.Screen name="Categories" component={() => <PlaceholderScreen title="Categories" />} />
-    <Tab.Screen name="Add" component={AddBeatScreen} />
+    <Tab.Screen name="Add" component={MyBeatsScreen} />
     <Tab.Screen name="Favorites" component={() => <PlaceholderScreen title="Favorites" />} />
     <Tab.Screen name="Profile" component={() => <PlaceholderScreen title="Profile" />} />
   </Tab.Navigator>

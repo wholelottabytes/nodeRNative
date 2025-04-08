@@ -3,6 +3,7 @@ import { View, Text, TextInput, Button, Alert, ActivityIndicator, StyleSheet } f
 import axios from 'axios';
 import { AuthContext } from './AuthContext';
 import { LoginScreenNavigationProp } from './type.ts';
+import config from './config';
 
 interface Props {
     navigation: LoginScreenNavigationProp;
@@ -38,7 +39,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
         setIsLoading(true);
 
         try {
-            const response = await axios.post('http://192.168.8.12:5000/auth/login', { 
+            const response = await axios.post(`http://${config.serverIP}:5000/auth/login`, { 
                 username: formattedUsername, 
                 password: trimmedPassword 
             });

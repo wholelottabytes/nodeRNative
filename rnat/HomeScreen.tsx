@@ -3,6 +3,7 @@ import { View, Text, TextInput, FlatList, TouchableOpacity, StyleSheet } from 'r
 import { useNavigation } from '@react-navigation/native';
 import { HomeScreenNavigationProp } from './type.ts'; // Импортируем тип
 import { Image } from 'react-native';
+import config from './config';
 
 // Определяем тип для битов
 interface Beat {
@@ -31,7 +32,7 @@ const HomeScreen = () => {
 
     useEffect(() => {
         console.log('useEffect started');
-        fetch('http://192.168.8.12:5000/beats/')
+        fetch(`http://${config.serverIP}:5000/beats/`)
             .then((response) => {
                 console.log('Response received');
                 return response.json();
@@ -75,7 +76,6 @@ const HomeScreen = () => {
             <Text style={styles.header}>Featured items</Text>
             {/* Featured Items */}
             <View style={styles.featuredList}>
-                
             {beats.length > 0 ? (
                 <FlatList
                     data={beats}  // Используем полученные данные
@@ -84,7 +84,7 @@ const HomeScreen = () => {
                     keyExtractor={(item, index) => item._id ? item._id.toString() : index.toString()}
                     renderItem={({ item }) => (
                         <TouchableOpacity onPress={() => navigation.navigate('BeatDetails', { beat: item })}>
-                            <Image source={{ uri: `http://192.168.8.12:5000/${item.imageUrl}` }} style={styles.card}/> 
+                            <Image source={{ uri: `http://${config.serverIP}:5000/${item.imageUrl}` }} style={styles.card}/> 
                                 <View style={styles.button}>
                                     <Text style={styles.buttonText}>{item.title} →</Text>
                                 </View>

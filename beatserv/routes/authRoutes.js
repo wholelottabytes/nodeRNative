@@ -7,7 +7,6 @@ const router = express.Router();
 const SECRET_KEY = process.env.JWT_SECRET;
 
 // Регистрация пользователя
-// Регистрация пользователя
 router.post("/register", async (req, res) => {
     try {
         const { username, password, userPhoto, balance, description } = req.body;
@@ -34,7 +33,6 @@ router.post("/register", async (req, res) => {
 });
 
 
-// Вход в систему
 // Вход в систему
 router.post("/login", async (req, res) => {
     try {
