@@ -5,6 +5,23 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 interface User {
     _id: string;
     username: string;
+    token: string;
+}
+function parseJwt(token: string) {
+    try {
+        const base64Url = token.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(
+            atob(base64)
+                .split('')
+                .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+                .join('')
+        );
+
+        return JSON.parse(jsonPayload);
+    } catch (error) {
+        return null;
+    }
 }
 
 interface AuthContextType {
@@ -35,18 +52,31 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
 
     // Проверка авторизации при запуске
-    useEffect(() => {
-        const checkAuth = async () => {
-            const token = await AsyncStorage.getItem('token');
-            const storedUser = await AsyncStorage.getItem('user');
+   useEffect(() => {
+    const checkAuth = async () => {
+        const token = await AsyncStorage.getItem('token');
+        const storedUser = await AsyncStorage.getItem('user');
 
-            if (token && storedUser) {
-                setIsAuthenticated(true);
-                setUser(JSON.parse(storedUser));
+        if (token && storedUser) {
+            const payload = parseJwt(token);
+
+            if (payload && payload.exp) {
+                const currentTime = Math.floor(Date.now() / 1000); // текущее время в секундах
+                if (payload.exp > currentTime) {
+                    setIsAuthenticated(true);
+                    setUser(JSON.parse(storedUser));
+                    return;
+                }
             }
-        };
-        checkAuth();
-    }, []);
+
+            // токен просрочен или некорректен
+            await logout();
+        }
+    };
+
+    checkAuth();
+}, []);
+
 
     // Вход
     const login = async (token: string, user: User) => {

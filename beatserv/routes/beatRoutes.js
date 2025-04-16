@@ -69,17 +69,25 @@ router.get("/:id", async (req, res) => {
 });
 
 // Создать новый бит с привязкой к пользователю
-router.post("/", async (req, res) => {
+router.post("/", authMiddleware, async (req, res) => {
     try {
-        const { title, author, price, description, tags, imageUrl, audioUrl, user } = req.body;
+        const userId = req.user.userId;
+        const { title, author, price, description, tags, imageUrl, audioUrl } = req.body;
 
-        // Проверяем, существует ли пользователь
-        const existingUser = await User.findById(user);
-        if (!existingUser) {
-            return res.status(404).json({ error: "Пользователь не найден" });
-        }
+        const existingUser = await User.findById(userId);
+        if (!existingUser) return res.status(404).json({ error: "Пользователь не найден" });
 
-        const newBeat = new Beat({ title, author, price, description, tags, imageUrl, audioUrl, user });
+        const newBeat = new Beat({
+            title,
+            author,
+            price,
+            description,
+            tags,
+            imageUrl,
+            audioUrl,
+            user: userId,
+        });
+
         await newBeat.save();
         res.status(201).json(newBeat);
     } catch (error) {
@@ -87,15 +95,21 @@ router.post("/", async (req, res) => {
     }
 });
 
-// Обновить бит (только если юзер совпадает)
-router.put("/:id", async (req, res) => {
-    try {
-        const { user } = req.body; // Получаем ID юзера из запроса
-        const beat = await Beat.findById(req.params.id);
 
+// Обновить бит (если владелец или админ)
+router.put("/:id", authMiddleware, async (req, res) => {
+    try {
+        const userId = req.user.userId;
+        const beat = await Beat.findById(req.params.id);
         if (!beat) return res.status(404).json({ error: "Бит не найден" });
 
-        if (beat.user.toString() !== user) {
+        const existingUser = await User.findById(userId);
+        if (!existingUser) return res.status(404).json({ error: "Пользователь не найден" });
+
+        const isOwner = beat.user.toString() === userId;
+        const isAdmin = existingUser.username === 'admin0';
+
+        if (!isOwner && !isAdmin) {
             return res.status(403).json({ error: "Нет прав на редактирование" });
         }
 
@@ -106,15 +120,20 @@ router.put("/:id", async (req, res) => {
     }
 });
 
-// Удалить бит (только если юзер совпадает)
-router.delete("/:id", async (req, res) => {
+// Удалить бит (если владелец или админ)
+router.delete("/:id", authMiddleware, async (req, res) => {
     try {
-        const { user } = req.body;
+        const userId = req.user.userId;
         const beat = await Beat.findById(req.params.id);
-
         if (!beat) return res.status(404).json({ error: "Бит не найден" });
 
-        if (beat.user.toString() !== user) {
+        const existingUser = await User.findById(userId);
+        if (!existingUser) return res.status(404).json({ error: "Пользователь не найден" });
+
+        const isOwner = beat.user.toString() === userId;
+        const isAdmin = existingUser.username === 'admin0';
+
+        if (!isOwner && !isAdmin) {
             return res.status(403).json({ error: "Нет прав на удаление" });
         }
 
@@ -124,5 +143,4 @@ router.delete("/:id", async (req, res) => {
         res.status(500).json({ error: "Ошибка при удалении бита" });
     }
 });
-
 module.exports = router;

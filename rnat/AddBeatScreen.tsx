@@ -40,11 +40,15 @@ const AddBeatScreen: React.FC<any> = ({ navigation }) => {
     };
 
     try {
-      const response = await fetch(`http://${config.serverIP}:5000/beats/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newBeat)
-      });
+      const token = user?.token;
+     const response = await fetch(`http://${config.serverIP}:5000/beats/`, {
+       method: 'POST',
+        headers: {
+         'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}` // ВАЖНО
+       },
+   body: JSON.stringify(newBeat),
+});
       
       // Проверяем заголовок ответа
       const contentType = response.headers.get('content-type');
@@ -64,7 +68,7 @@ const AddBeatScreen: React.FC<any> = ({ navigation }) => {
       // Если все хорошо, читаем JSON-ответ
       const data = await response.json();
       Alert.alert('Успех', `Бит успешно создан, ID: ${data._id || 'неизвестно'}`);
-      navigation.navigate('Home');
+      navigation.navigate('Main', { screen: 'Home' });
     } catch (error: any) {
       Alert.alert('Ошибка', error.message);
     } finally {

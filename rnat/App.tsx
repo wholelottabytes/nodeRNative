@@ -10,7 +10,8 @@ import BeatDetailsScreen from './BeatDetailsScreen';
 // import AddBeatScreen from './AddBeatScreen';
 import { View, Text } from 'react-native';
 import MyBeatsScreen from './MyBeatsScreen';
-
+import EditBeatScreen from './EditBeatScreen';
+import AddBeatScreen from './AddBeatScreen';
 // Заглушка для экранов, если потребуется
 const PlaceholderScreen = ({ title }: { title: string }) => (
   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -50,6 +51,16 @@ const AppContent = () => {
         <Stack.Screen
           name="BeatDetails"
           component={BeatDetailsScreen as React.ComponentType<any>}
+        />
+        <Stack.Screen
+          name="EditBeat"
+          component={EditBeatScreen as React.ComponentType<any>}
+           options={{ headerShown: true, title: 'Редактировать бит' }}
+        />
+        <Stack.Screen
+          name="AddBeat"
+          component={AddBeatScreen as React.ComponentType<any>}
+          options={{ headerShown: true, title: 'Добавить бит' }}
         />
       </Stack.Navigator>
     </NavigationContainer>

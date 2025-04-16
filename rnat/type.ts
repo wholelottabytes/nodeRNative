@@ -6,6 +6,9 @@ export type RootStackParamList = {
     Login: undefined; // Экран входа, без параметров
     Register: undefined; // Экран регистрации, без параметров
     Main: undefined; // Основной экран, без параметров
+    MyBeats: undefined;
+    EditBeat: { beat: any };
+    AddBeat: undefined;
     BeatDetails: {
         beat: {
             createdAt: string | number | Date;
@@ -38,4 +41,12 @@ export type BeatDetailsScreenRouteProp = RouteProp<RootStackParamList, 'BeatDeta
 export type BeatDetailsScreenProps = {
     route: BeatDetailsScreenRouteProp;
     navigation: BeatDetailsScreenNavigationProp;
+};
+export type EditBeatScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'EditBeat'>;
+export type EditBeatScreenRouteProp = RouteProp<RootStackParamList, 'EditBeat'>;
+
+// Тип для пропсов EditBeatScreen
+export type EditBeatScreenProps = {
+  route: EditBeatScreenRouteProp;
+  navigation: EditBeatScreenNavigationProp;
 };
