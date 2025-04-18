@@ -6,6 +6,7 @@ const path = require('path');
 
 const authRoutes = require("./routes/authRoutes");
 const beatRoutes = require("./routes/beatRoutes");
+const profileRoutes = require('./routes/profileRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -24,5 +25,6 @@ app.get("/", (req, res) => {
 app.use('/assets', express.static(path.join(__dirname, 'assets')));
 app.use("/auth", authRoutes);
 app.use("/beats", beatRoutes);
+app.use('/profile', profileRoutes);
 
 app.listen(PORT, () => console.log(`Сервер запущен на порту ${PORT}`));

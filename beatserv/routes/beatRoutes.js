@@ -4,6 +4,8 @@ const Beat = require("../models/Beat");
 const User = require("../models/User"); // Добавили импорт User
 const router = express.Router();
 const jwt = require('jsonwebtoken');
+const multer = require("multer");
+const path = require("path");
 
 const SECRET_KEY = process.env.JWT_SECRET;
 
@@ -32,6 +34,34 @@ const authMiddleware = (req, res, next) => {
         return res.status(401).json({ message: "Неверный или просроченный токен" });
     }
 };
+// Конфигурация для загрузки изображений и аудиофайлов
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const fileType = file.mimetype.split("/")[0];
+    const dir = fileType === "image" ? "assets/images" : "assets/audio";
+    cb(null, dir); // Указываем папку для файлов
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname); // Расширение файла
+    cb(null, Date.now() + ext); // Генерация уникального имени
+  },
+});
+
+const upload = multer({ storage });
+
+router.post("/upload-image", authMiddleware, upload.single("image"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: "Ошибка при загрузке изображения" });
+  }
+  res.json({ imageUrl: `assets/images/${req.file.filename}` });
+});
+
+router.post("/upload-audio", authMiddleware, upload.single("audio"), (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ message: "Ошибка при загрузке аудио" });
+  }
+  res.json({ audioUrl: `assets/audio/${req.file.filename}` });
+});
 router.get("/my-beats", authMiddleware, async (req, res) => {
     try {
         const userId = req.user.userId; // Получаем ID пользователя из декодированного токена

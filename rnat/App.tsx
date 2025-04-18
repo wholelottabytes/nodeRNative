@@ -11,6 +11,7 @@ import BeatDetailsScreen from './BeatDetailsScreen';
 import { View, Text } from 'react-native';
 import MyBeatsScreen from './MyBeatsScreen';
 import EditBeatScreen from './EditBeatScreen';
+import ProfileScreen from './ProfileScreen';
 import AddBeatScreen from './AddBeatScreen';
 // Заглушка для экранов, если потребуется
 const PlaceholderScreen = ({ title }: { title: string }) => (
@@ -27,7 +28,7 @@ const MainTabs = () => (
     <Tab.Screen name="Categories" component={() => <PlaceholderScreen title="Categories" />} />
     <Tab.Screen name="Add" component={MyBeatsScreen} />
     <Tab.Screen name="Favorites" component={() => <PlaceholderScreen title="Favorites" />} />
-    <Tab.Screen name="Profile" component={() => <PlaceholderScreen title="Profile" />} />
+    <Tab.Screen name="Profile" component={ProfileScreen} />
   </Tab.Navigator>
 );
 
