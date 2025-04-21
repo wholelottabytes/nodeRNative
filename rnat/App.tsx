@@ -13,6 +13,7 @@ import MyBeatsScreen from './MyBeatsScreen';
 import EditBeatScreen from './EditBeatScreen';
 import ProfileScreen from './ProfileScreen';
 import AddBeatScreen from './AddBeatScreen';
+import LikedBeatsScreen from './LikedBeatsScreen';
 // Заглушка для экранов, если потребуется
 const PlaceholderScreen = ({ title }: { title: string }) => (
   <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
@@ -27,7 +28,7 @@ const MainTabs = () => (
     <Tab.Screen name="Home" component={HomeScreen} />
     <Tab.Screen name="Categories" component={() => <PlaceholderScreen title="Categories" />} />
     <Tab.Screen name="Add" component={MyBeatsScreen} />
-    <Tab.Screen name="Favorites" component={() => <PlaceholderScreen title="Favorites" />} />
+    <Tab.Screen name="Rated" component={LikedBeatsScreen} />
     <Tab.Screen name="Profile" component={ProfileScreen} />
   </Tab.Navigator>
 );

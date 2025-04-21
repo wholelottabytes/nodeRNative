@@ -6,7 +6,8 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const multer = require("multer");
 const path = require("path");
-
+const Transaction = require("../models/Transaction");
+const Rating = require('../models/Rating'); 
 const SECRET_KEY = process.env.JWT_SECRET;
 
 if (!SECRET_KEY) {
@@ -48,6 +49,138 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage });
+router.get('/liked', authMiddleware, async (req, res) => {
+  try {
+    const userId = req.user.userId;              // берём userId из токена
+    const score = parseInt(req.query.score);     // значение оценки из query
+
+    const query = { user: userId };
+    if (!isNaN(score)) query.value = score;     
+
+    const ratings = await Rating.find(query).select('beat');
+    const beatIds = ratings.map(r => r.beat);
+
+    const beats = await Beat.find({ _id: { $in: beatIds } });
+
+    res.json(beats);
+  } catch (err) {
+    console.error('Ошибка сервера в /liked:', err);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
+
+
+
+
+
+router.post("/rate/:beatId", authMiddleware, async (req, res) => {
+  const userId = req.user.userId;
+  const beatId = req.params.beatId;
+  const { value } = req.body;
+
+  if (value < 1 || value > 5) {
+    return res.status(400).json({ error: "Оценка должна быть от 1 до 5" });
+  }
+
+  try {
+    const beat = await Beat.findById(beatId);
+    if (!beat) return res.status(404).json({ error: "Бит не найден" });
+
+    const existingRating = await Rating.findOne({ beat: beatId, user: userId });
+
+    if (existingRating) {
+      existingRating.value = value;
+      await existingRating.save();
+      return res.json({ message: "Оценка обновлена", rating: existingRating });
+    }
+
+    const newRating = new Rating({ beat: beatId, user: userId, value });
+    await newRating.save();
+
+    res.status(201).json({ message: "Оценка добавлена", rating: newRating });
+  } catch (error) {
+    console.error("Ошибка при оценке бита:", error);
+    res.status(500).json({ error: "Ошибка сервера" });
+  }
+});
+// Получить текущую и среднюю оценку
+router.get('/rating/:id', authMiddleware, async (req, res) => {
+  const beatId = req.params.id;
+  const userId = req.user.userId;   
+
+  try {
+    const userRating = await Rating.findOne({ beat: beatId, user: userId });
+    const allRatings = await Rating.find({ beat: beatId });
+
+    const averageRating =
+      allRatings.length > 0
+        ? allRatings.reduce((sum, r) => sum + r.value, 0) / allRatings.length
+        : 0;
+
+    res.json({
+      userRating: userRating ? userRating.value : 0,
+      averageRating: parseFloat(averageRating.toFixed(1)),
+    });
+  } catch (err) {
+    console.error('Ошибка при получении оценки:', err);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
+
+
+
+router.post("/buy/:beatId", authMiddleware, async (req, res) => {
+  try {
+    const beatId = req.params.beatId;
+    const buyerId = req.user.userId;
+
+    const beat = await Beat.findById(beatId).populate("user");
+    if (!beat) return res.status(404).json({ error: "Бит не найден" });
+
+    const seller = beat.user;
+    if (seller._id.toString() === buyerId)
+      return res.status(400).json({ error: "Нельзя купить свой собственный бит" });
+
+    const buyer = await User.findById(buyerId);
+    const admin = await User.findOne({ username: "admin0" });
+
+    if (!buyer || !admin) return res.status(404).json({ error: "Покупатель или админ не найден" });
+
+    if (buyer.balance < beat.price)
+      return res.status(400).json({ error: "Недостаточно средств" });
+
+    // Расчёт
+    const commission = +(beat.price * 0.03).toFixed(2);
+    const sellerAmount = beat.price - commission;
+
+    // Перевод
+    buyer.balance -= beat.price;
+    seller.balance += sellerAmount;
+    admin.balance += commission;
+
+    // Сохранение всех пользователей
+    await buyer.save();
+    await seller.save();
+    await admin.save();
+
+    // Создание транзакции
+    const transaction = new Transaction({
+      beat: beat._id,
+      buyer: buyer._id,
+      seller: seller._id,
+      amount: beat.price,
+    });
+
+    await transaction.save();
+
+    res.status(200).json({ message: "Покупка завершена", transaction });
+  } catch (error) {
+    console.error("Ошибка при покупке бита:", error);
+    res.status(500).json({ error: "Ошибка сервера" });
+  }
+});
+
+
 
 router.post("/upload-image", authMiddleware, upload.single("image"), (req, res) => {
   if (!req.file) {

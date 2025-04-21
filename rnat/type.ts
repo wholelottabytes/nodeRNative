@@ -2,31 +2,34 @@ import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 
 // Определите типы для параметров каждого экрана
-export type RootStackParamList = {
-    Login: undefined; // Экран входа, без параметров
-    Register: undefined; // Экран регистрации, без параметров
-    Main: undefined; // Основной экран, без параметров
-    MyBeats: undefined;
-    EditBeat: { beat: any };
-    AddBeat: undefined;
-    BeatDetails: {
-        beat: {
-            createdAt: string | number | Date;
-            _id: string;            // Используем _id, так как в ответе от сервера это поле
-            imageUrl: string;       // Путь к изображению
-            audioUrl: string;       // Путь к аудиофайлу
-            title: string;
-            author: string;
-            price: number;
-            description: string;
-            tags: string[];
-            user: {
-                _id: string;
-                username: string;
-    };
-        };
-    }; // Экран с подробным описанием бита
+// Вынеси общий тип Beat
+export type Beat = {
+  createdAt: string | number | Date;
+  _id: string;
+  imageUrl: string;
+  audioUrl: string;
+  title: string;
+  author: string;
+  price: number;
+  description: string;
+  tags: string[];
+  user: {
+    _id: string;
+    username: string;
+  };
 };
+
+// Теперь используй его в RootStackParamList
+export type RootStackParamList = {
+  Login: undefined;
+  Register: undefined;
+  Main: undefined;
+  MyBeats: undefined;
+  EditBeat: { beat: any };
+  AddBeat: undefined;
+  BeatDetails: { beat: Beat }; // вот он
+};
+
 
 // Типы для навигации
 export type LoginScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Login'>;
@@ -45,6 +48,11 @@ export type BeatDetailsScreenProps = {
 export type EditBeatScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'EditBeat'>;
 export type EditBeatScreenRouteProp = RouteProp<RootStackParamList, 'EditBeat'>;
 
+export type LikedBeatsScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'Main'>;
+
+export type LikedBeatsScreenProps = {
+  navigation: LikedBeatsScreenNavigationProp;
+};
 // Тип для пропсов EditBeatScreen
 export type EditBeatScreenProps = {
   route: EditBeatScreenRouteProp;

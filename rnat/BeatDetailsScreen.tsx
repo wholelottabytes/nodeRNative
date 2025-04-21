@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import Slider from '@react-native-community/slider';
 import { Button, Title, Paragraph } from 'react-native-paper';
@@ -6,6 +6,9 @@ import Video, { OnLoadData, OnProgressData } from 'react-native-video';
 import { Star } from 'react-native-feather';
 import { BeatDetailsScreenProps } from './type';
 import config from './config';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import axios from 'axios';
+import { Alert } from 'react-native';
 
 // Определяем собственный тип для рефа Video
 interface VideoRefType {
@@ -20,9 +23,94 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [rating, setRating] = useState(0);
+  const [averageRating, setAverageRating] = useState<number | null>(null);
+
 
   // Используем реф с собственным типом
   const videoRef = useRef<VideoRefType | null>(null);
+
+const fetchRatings = useCallback(async () => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) return;
+
+    const response = await axios.get(
+      `http://${config.serverIP}:5000/beats/rating/${beat._id}`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    setRating(response.data.userRating);
+    setAverageRating(response.data.averageRating);
+  } catch (error) {
+    console.error('Ошибка при загрузке рейтингов:', error);
+  }
+}, [beat._id]);
+
+
+useEffect(() => {
+  fetchRatings();
+}, [fetchRatings]);
+
+  const handleRate = async (value: number) => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      Alert.alert('Ошибка', 'Вы не авторизованы');
+      return;
+    }
+
+    setRating(value); // Обновляем локально
+
+    // Сначала обновляем состояние, а потом отправляем на сервер
+    await axios.post(
+      `http://${config.serverIP}:5000/beats/rate/${beat._id}`,
+      { value },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+    
+    // После того как поставили оценку, обновляем рейтинг с сервера
+    fetchRatings(); 
+    Alert.alert('Спасибо за оценку!');
+  } catch (error: any) {
+    console.error('Ошибка при выставлении оценки:', error);
+    Alert.alert('Ошибка', error.response?.data?.error || 'Не удалось поставить оценку');
+  }
+};
+
+
+const handleBuy = async () => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      Alert.alert('Ошибка', 'Вы не авторизованы');
+      return;
+    }
+
+    await axios.post(
+      `http://${config.serverIP}:5000/beats/buy/${beat._id}`,
+      {},
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    Alert.alert('Успех', 'Бит успешно куплен!');
+    // Дополнительно можно обновить UI, например, баланс
+  } catch (error: any) {
+    console.error('Ошибка при покупке бита:', error);
+    Alert.alert('Ошибка', error.response?.data?.error || 'Не удалось купить бит');
+  }
+};
 
   // Обработчик загрузки аудио (получение длительности)
   const handleLoad = (data: OnLoadData) => {
@@ -81,17 +169,22 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
         <Paragraph style={styles.tags}>Теги: {beat.tags.join(', ')}</Paragraph>
         <View style={styles.ratingContainer}>
           {[1, 2, 3, 4, 5].map((star) => (
-            <TouchableOpacity key={star} onPress={() => setRating(star)}>
-              <Star
-                fill={rating >= star ? '#FFD700' : 'transparent'}
-                stroke={rating >= star ? '#FFD700' : '#000'}
-                width={30}
-                height={30}
+            <TouchableOpacity key={star} onPress={() => handleRate(star)}>
+            <Star
+               fill={rating >= star ? '#FFD700' : 'transparent'}
+               stroke={rating >= star ? '#FFD700' : '#000'}
+               width={30}
+               height={30}
               />
-            </TouchableOpacity>
-          ))}
+           </TouchableOpacity>
+            ))}
         </View>
-        <Button mode="contained" style={styles.buyButton}>
+              {averageRating !== null && (
+          <Text style={{ textAlign: 'center', marginBottom: 10 }}>
+            Средняя оценка: {averageRating.toFixed(1)} ⭐
+          </Text>
+        )}
+       <Button mode="contained" style={styles.buyButton} onPress={handleBuy}>
           Купить за ${beat.price}
         </Button>
         <View style={styles.playerContainer}>

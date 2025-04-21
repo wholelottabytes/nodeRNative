@@ -4,6 +4,7 @@ const multer = require("multer");
 const path = require("path");
 const User = require("../models/User");
 const authenticateToken = require("../auth.js");
+const Transaction = require("../models/Transaction");
 
 // Настройка multer
 const storage = multer.diskStorage({
@@ -74,6 +75,50 @@ router.put("/balance", authenticateToken, async (req, res) => {
     res.json({ balance: user.balance });
   } catch (err) {
     res.status(500).json({ error: "Ошибка пополнения баланса" });
+  }
+});
+
+router.get("/transactions", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+
+    // 1) Покупки: где текущий юзер — buyer
+    const purchaseTxs = await Transaction
+      .find({ buyer: userId })
+      .populate("beat", "title imageUrl price")
+      .sort({ createdAt: -1 });
+
+
+    // 2) Продажи: где текущий юзер — seller
+    const salesTxs = await Transaction
+      .find({ seller: userId })
+      .populate("beat", "title imageUrl price")
+      .populate("buyer", "username")   // подтянем имя покупателя
+      .sort({ createdAt: -1 });
+
+
+    // Формируем отдачу
+    const purchases = purchaseTxs.map(t => ({
+      id: t._id,
+      beatTitle: t.beat.title,
+      beatImage: t.beat.imageUrl,
+      amount: t.amount,
+      date: t.date,
+    }));
+    const sales = salesTxs.map(t => ({
+      id: t._id,
+      beatTitle: t.beat.title,
+      beatImage: t.beat.imageUrl,
+      buyerUsername: t.buyer.username,
+      amount: t.amount,
+      date: t.date,
+    }));
+
+
+    res.json({ purchases, sales });
+  } catch (err) {
+    console.error("Ошибка получения транзакций:", err);
+    res.status(500).json({ error: "Ошибка сервера" });
   }
 });
 
