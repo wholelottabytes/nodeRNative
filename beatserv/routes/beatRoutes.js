@@ -70,7 +70,77 @@ router.get('/liked', authMiddleware, async (req, res) => {
 });
 
 
-
+// Получить самые популярные биты за период (day/month/year) по рейтингу
+router.get('/popular/:period', async (req, res) => {
+    try {
+        const period = req.params.period;
+        let dateFilter = {};
+        
+        // Устанавливаем фильтр по дате в зависимости от периода
+        const now = new Date();
+        if (period === 'day') {
+            dateFilter = { createdAt: { $gte: new Date(now.setDate(now.getDate() - 1)) } };
+        } else if (period === 'month') {
+            dateFilter = { createdAt: { $gte: new Date(now.setMonth(now.getMonth() - 1)) } };
+        } else if (period === 'year') {
+            dateFilter = { createdAt: { $gte: new Date(now.setFullYear(now.getFullYear() - 1)) } };
+        }
+        
+        // Агрегация для получения популярных битов по среднему рейтингу
+        const popularBeats = await Rating.aggregate([
+            {
+                $lookup: {
+                    from: 'beats',
+                    localField: 'beat',
+                    foreignField: '_id',
+                    as: 'beat'
+                }
+            },
+            { $unwind: '$beat' },
+            { $match: { 'beat.createdAt': dateFilter.createdAt } },
+            {
+                $group: {
+                    _id: '$beat._id',
+                    beat: { $first: '$beat' },
+                    averageRating: { $avg: '$value' },
+                    ratingsCount: { $sum: 1 }
+                }
+            },
+            { $sort: { averageRating: -1, ratingsCount: -1 } },
+            { $limit: 20 },
+            {
+                $lookup: {
+                    from: 'users',
+                    localField: 'beat.user',
+                    foreignField: '_id',
+                    as: 'user'
+                }
+            },
+            { $unwind: '$user' },
+            {
+                $project: {
+                    _id: '$beat._id',
+                    title: '$beat.title',
+                    author: '$beat.author',
+                    price: '$beat.price',
+                    description: '$beat.description',
+                    tags: '$beat.tags',
+                    imageUrl: '$beat.imageUrl',
+                    audioUrl: '$beat.audioUrl',
+                    createdAt: '$beat.createdAt',
+                    averageRating: { $round: ['$averageRating', 1] },
+                    ratingsCount: 1,
+                    'user.username': 1
+                }
+            }
+        ]);
+        
+        res.json(popularBeats);
+    } catch (error) {
+        console.error('Ошибка при получении популярных битов:', error);
+        res.status(500).json({ error: 'Ошибка сервера' });
+    }
+});
 
 
 router.post("/rate/:beatId", authMiddleware, async (req, res) => {
@@ -197,14 +267,37 @@ router.post("/upload-audio", authMiddleware, upload.single("audio"), (req, res) 
 });
 router.get("/my-beats", authMiddleware, async (req, res) => {
     try {
-        const userId = req.user.userId; // Получаем ID пользователя из декодированного токена
-        const beats = await Beat.find({ user: userId }).populate("user", "username");
+        const userId = req.user.userId;
+        const { 
+            search = '',
+            page = 1, 
+            limit = 20 
+        } = req.query;
+
+        const query = { user: userId };
         
-        if (!beats || beats.length === 0) {
-            return res.status(404).json({ error: "Нет битов для этого пользователя" });
+        if (search) {
+            query.$or = [
+                { title: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } }
+            ];
         }
 
-        res.json(beats);
+        const [beats, count] = await Promise.all([
+            Beat.find(query)
+                .sort('-createdAt')
+                .skip((page - 1) * limit)
+                .limit(limit)
+                .populate('user', 'username'),
+            Beat.countDocuments(query)
+        ]);
+
+        res.json({
+            beats,
+            totalPages: Math.ceil(count / limit),
+            currentPage: page,
+            totalBeats: count
+        });
     } catch (error) {
         console.error(error);
         res.status(500).json({ error: "Ошибка сервера" });
@@ -213,9 +306,87 @@ router.get("/my-beats", authMiddleware, async (req, res) => {
 // Получить все биты с данными пользователя
 router.get("/", async (req, res) => {
     try {
-        const beats = await Beat.find().populate("user", "username"); // Подтягиваем ник юзера
-        res.json(beats);
+        const { 
+            search = '',
+            minPrice,
+            maxPrice,
+            tags,
+            sort = '-createdAt', 
+            page = 1, 
+            limit = 20 
+        } = req.query;
+
+        // Создаем объект запроса
+        const query = {};
+        
+        // Поиск по тексту
+        if (search) {
+            query.$or = [
+                { title: { $regex: search, $options: 'i' } },
+                { description: { $regex: search, $options: 'i' } },
+                { author: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        // Фильтр по цене
+        if (minPrice || maxPrice) {
+            query.price = {};
+            if (minPrice) query.price.$gte = Number(minPrice);
+            if (maxPrice) query.price.$lte = Number(maxPrice);
+        }
+
+        // Фильтр по тегам
+        if (tags) {
+            const tagsArray = Array.isArray(tags) ? tags : [tags];
+            query.tags = { $in: tagsArray.map(tag => new RegExp(tag, 'i')) };
+        }
+
+        // Агрегация для получения битов с рейтингами
+        const beats = await Beat.aggregate([
+            { $match: query },
+            {
+                $lookup: {
+                    from: "ratings",
+                    localField: "_id",
+                    foreignField: "beat",
+                    as: "ratings"
+                }
+            },
+            {
+                $addFields: {
+                    averageRating: { $avg: "$ratings.value" },
+                    ratingsCount: { $size: "$ratings" }
+                }
+            },
+            { $sort: { [sort.replace('-', '')]: sort.startsWith('-') ? -1 : 1 } },
+            { $skip: (Number(page) - 1) * Number(limit) },
+            { $limit: Number(limit) },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "user",
+                    foreignField: "_id",
+                    as: "user"
+                }
+            },
+            { $unwind: "$user" },
+            {
+                $project: {
+                    ratings: 0 // Исключаем массив ratings из результата
+                }
+            }
+        ]);
+
+        const count = await Beat.countDocuments(query);
+
+        res.json({
+            beats,
+            totalPages: Math.ceil(count / Number(limit)),
+            currentPage: Number(page),
+            totalBeats: count
+        });
     } catch (error) {
+        console.error("Ошибка при получении битов:", error);
         res.status(500).json({ error: "Ошибка сервера" });
     }
 });

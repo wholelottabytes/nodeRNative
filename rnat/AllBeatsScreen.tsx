@@ -10,19 +10,14 @@ import {
   Alert,
   Image
 } from 'react-native';
-import axios from 'axios';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
-import { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { RootStackParamList } from './type';
+import { HomeScreenNavigationProp } from './type.ts';
 import config from './config';
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MyBeats'>;
-
 interface Beat {
-   _id: string;
-  imageUrl: string | null;  // Разрешаем null
-  audioUrl: string | null;  // Разрешаем null
+  _id: string;
+  imageUrl: string | null;
+  audioUrl: string | null;
   title: string;
   author: string;
   price: number;
@@ -44,9 +39,12 @@ interface ApiResponse {
   totalBeats: number;
 }
 
-const MyBeatsScreen = () => {
+const AllBeatsScreen = () => {
   const [beats, setBeats] = useState<Beat[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
+  const [minPrice, setMinPrice] = useState('0');
+  const [maxPrice, setMaxPrice] = useState('1000');
+  const [tagsQuery, setTagsQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [page, setPage] = useState(1);
@@ -54,17 +52,11 @@ const MyBeatsScreen = () => {
   const [totalBeats, setTotalBeats] = useState(0);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
-  const navigation = useNavigation<NavigationProp>();
+  const navigation = useNavigation<HomeScreenNavigationProp>();
   const flatListRef = useRef<FlatList<Beat>>(null);
 
   const fetchBeats = useCallback(async (pageNum = 1, isRefreshing = false) => {
     try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) {
-        Alert.alert('Ошибка', 'Требуется авторизация');
-        return;
-      }
-
       if (isRefreshing) {
         setIsRefreshing(true);
       } else if (pageNum === 1) {
@@ -73,102 +65,88 @@ const MyBeatsScreen = () => {
         setIsLoadingMore(true);
       }
 
-      const response = await axios.get<ApiResponse>(
-        `http://${config.serverIP}:5000/beats/my-beats`,
-        {
-          params: {
-            search: searchQuery,
-            page: pageNum,
-            limit: 20
-          },
-          headers: { Authorization: `Bearer ${token}` }
-        }
-      );
+      const params = new URLSearchParams();
+      if (searchQuery) params.append('search', searchQuery);
+      if (minPrice) params.append('minPrice', minPrice);
+      if (maxPrice) params.append('maxPrice', maxPrice);
+      if (tagsQuery) params.append('tags', tagsQuery);
+      params.append('page', pageNum.toString());
 
-      if (pageNum === 1) {
-        setBeats(response.data.beats);
-      } else {
-        setBeats(prev => [...prev, ...response.data.beats]);
+      const response = await fetch(`http://${config.serverIP}:5000/beats/?${params.toString()}`);
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
       }
 
-      setTotalPages(response.data.totalPages);
-      setTotalBeats(response.data.totalBeats);
+      const data: ApiResponse = await response.json();
+
+      if (pageNum === 1) {
+        setBeats(data.beats);
+      } else {
+        setBeats(prev => [...prev, ...data.beats]);
+      }
+
+      setTotalPages(data.totalPages);
+      setTotalBeats(data.totalBeats);
       setPage(pageNum);
-    } catch (err: any) {
-      console.error('Ошибка:', err.response?.data || err.message);
-      Alert.alert('Ошибка', err.response?.data?.error || 'Не удалось загрузить биты');
+    } catch (error) {
+      console.error('Error fetching beats:', error);
+      Alert.alert('Error', 'Failed to load beats. Please try again.');
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
       setIsLoadingMore(false);
     }
-  }, [searchQuery]);
+  }, [searchQuery, minPrice, maxPrice, tagsQuery]);
 
   useEffect(() => {
     fetchBeats(1);
   }, [fetchBeats]);
 
-  const handleRefresh = useCallback(() => {
+  const handleRefresh = () => {
     fetchBeats(1, true);
-  }, [fetchBeats]);
+  };
 
-  const handleLoadMore = useCallback(() => {
+  const handleLoadMore = () => {
     if (!isLoadingMore && page < totalPages) {
       fetchBeats(page + 1);
     }
-  }, [fetchBeats, isLoadingMore, page, totalPages]);
+  };
 
-  const deleteBeat = useCallback(async (beatId: string) => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      if (!token) return;
-
-      await axios.delete(`http://${config.serverIP}:5000/beats/${beatId}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-
-      setBeats(prev => prev.filter(b => b._id !== beatId));
-      Alert.alert('Успешно', 'Бит удален');
-    } catch (err: any) {
-      Alert.alert('Ошибка', err.response?.data?.error || 'Не удалось удалить бит');
-    }
-  }, []);
-
-  const handleLongPress = useCallback((beat: Beat) => {
-    Alert.alert('Действия', '', [
-      {
-        text: 'Изменить',
-        onPress: () => navigation.navigate('EditBeat', { beat }),
-      },
-      {
-        text: 'Удалить',
-        onPress: () => deleteBeat(beat._id),
-        style: 'destructive'
-      },
-      { text: 'Отмена', style: 'cancel' }
-    ]);
-  }, [deleteBeat, navigation]);
+  const getItemLayout = useCallback(
+    (data: ArrayLike<Beat> | null | undefined, index: number) => ({
+      length: 110,
+      offset: 110 * index,
+      index,
+    }),
+    []
+  );
 
   const renderBeatItem = useCallback(({ item }: { item: Beat }) => (
     <TouchableOpacity
       style={styles.beatCard}
       onPress={() => navigation.navigate('BeatDetails', { beat: item })}
-      onLongPress={() => handleLongPress(item)}
     >
       <Image
         source={{ uri: item.imageUrl ? `http://${config.serverIP}:5000/${item.imageUrl}` : 'https://via.placeholder.com/150' }}
         style={styles.beatImage}
-        onError={() => console.log("Ошибка загрузки изображения")}
+        onError={() => console.log("Image load error")}
       />
       <View style={styles.beatInfo}>
         <Text style={styles.beatTitle}>{item.title}</Text>
-        <Text style={styles.beatPrice}>${item.price.toFixed(2)}</Text>
-        <Text style={styles.beatDescription} numberOfLines={2}>
-          {item.description}
+        <Text style={styles.beatAuthor}>by {item.user?.username || 'Unknown'}</Text>
+        <View style={styles.beatStats}>
+          <Text style={styles.beatRating}>
+            ⭐ {item.averageRating?.toFixed(1) || 'N/A'} ({item.ratingsCount || 0})
+          </Text>
+          <Text style={styles.beatPrice}>${item.price.toFixed(2)}</Text>
+        </View>
+        <Text style={styles.beatTags}>
+          {item.tags?.join(', ') || 'No tags'}
         </Text>
       </View>
     </TouchableOpacity>
-  ), [handleLongPress, navigation]);
+  ), [navigation]);
 
   const renderFooter = () => {
     if (!isLoadingMore) return null;
@@ -184,14 +162,40 @@ const MyBeatsScreen = () => {
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder="Поиск по названию и описанию..."
+          placeholder="Search in title, description, author..."
           placeholderTextColor="#888"
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
       </View>
 
-      {isLoading ? (
+      <View style={styles.filtersContainer}>
+        <TextInput
+          style={styles.filterInput}
+          placeholder="Min price"
+          placeholderTextColor="#888"
+          value={minPrice}
+          onChangeText={setMinPrice}
+          keyboardType="numeric"
+        />
+        <TextInput
+          style={styles.filterInput}
+          placeholder="Max price"
+          placeholderTextColor="#888"
+          value={maxPrice}
+          onChangeText={setMaxPrice}
+          keyboardType="numeric"
+        />
+        <TextInput
+          style={styles.filterInput}
+          placeholder="Tags (comma separated)"
+          placeholderTextColor="#888"
+          value={tagsQuery}
+          onChangeText={setTagsQuery}
+        />
+      </View>
+
+      {isLoading && page === 1 ? (
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#000" />
         </View>
@@ -203,27 +207,23 @@ const MyBeatsScreen = () => {
           renderItem={renderBeatItem}
           contentContainerStyle={styles.listContainer}
           ListEmptyComponent={
-            <Text style={styles.emptyText}>Биты не найдены</Text>
+            <Text style={styles.emptyText}>
+              No beats found. Try different search criteria.
+            </Text>
           }
           ListFooterComponent={renderFooter}
           onEndReached={handleLoadMore}
           onEndReachedThreshold={0.5}
           refreshing={isRefreshing}
           onRefresh={handleRefresh}
+          getItemLayout={getItemLayout}
           initialNumToRender={10}
           windowSize={10}
         />
       )}
 
-      <TouchableOpacity
-        style={styles.addButton}
-        onPress={() => navigation.navigate('AddBeat')}
-      >
-        <Text style={styles.addButtonText}>＋ Добавить новый бит</Text>
-      </TouchableOpacity>
-
       <Text style={styles.resultsText}>
-        Показано {beats.length} из {totalBeats} битов
+        Showing {beats.length} of {totalBeats} beats
       </Text>
     </View>
   );
@@ -241,6 +241,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   searchContainer: {
+    marginBottom: 10,
+  },
+  filtersContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginBottom: 15,
   },
   searchInput: {
@@ -250,6 +255,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#333',
   },
+  filterInput: {
+    flex: 1,
+    backgroundColor: '#f2f2f2',
+    padding: 10,
+    borderRadius: 10,
+    fontSize: 14,
+    color: '#333',
+    marginHorizontal: 5,
+  },
   listContainer: {
     paddingBottom: 20,
   },
@@ -258,9 +272,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#f8f8f8',
     borderRadius: 12,
     marginBottom: 15,
-    height: 110,
+    overflow: 'hidden',
     alignItems: 'center',
     elevation: 2,
+    height: 110,
   },
   beatImage: {
     width: 80,
@@ -270,22 +285,38 @@ const styles = StyleSheet.create({
   },
   beatInfo: {
     flex: 1,
-    paddingRight: 15,
+    padding: 15,
+    paddingLeft: 0,
   },
   beatTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: 'black',
+  },
+  beatAuthor: {
+    fontSize: 14,
+    color: '#666',
+    marginTop: 4,
+  },
+  beatStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 8,
+  },
+  beatRating: {
+    fontSize: 14,
+    color: '#FFD700',
   },
   beatPrice: {
     fontSize: 14,
-    color: '#4CAF50',
-    marginTop: 4,
+    fontWeight: 'bold',
+    color: 'black',
   },
-  beatDescription: {
+  beatTags: {
     fontSize: 12,
-    color: '#666',
-    marginTop: 4,
+    color: '#888',
+    marginTop: 5,
+    fontStyle: 'italic',
   },
   emptyText: {
     textAlign: 'center',
@@ -298,18 +329,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  addButton: {
-    backgroundColor: '#2196F3',
-    padding: 14,
-    borderRadius: 8,
-    alignItems: 'center',
-    marginVertical: 10,
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
   resultsText: {
     textAlign: 'center',
     color: '#666',
@@ -318,4 +337,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default MyBeatsScreen;
+export default AllBeatsScreen;

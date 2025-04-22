@@ -6,7 +6,6 @@ const BeatSchema = new mongoose.Schema({
     price: { type: Number, required: true },
     description: { type: String, required: true },
     tags: { type: [String], required: true },
-    likes: { type: Number, default: 0 },
     imageUrl: { type: String, required: true },
     audioUrl: { type: String, required: true },
     user: { type: mongoose.Schema.Types.ObjectId, ref: "User", required: true } // Связь с юзером

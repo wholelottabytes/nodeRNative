@@ -4,10 +4,9 @@ import { RouteProp } from '@react-navigation/native';
 // Определите типы для параметров каждого экрана
 // Вынеси общий тип Beat
 export type Beat = {
-  createdAt: string | number | Date;
   _id: string;
-  imageUrl: string;
-  audioUrl: string;
+  imageUrl: string | null;  // Разрешаем null
+  audioUrl: string | null;  // Разрешаем null
   title: string;
   author: string;
   price: number;
@@ -17,7 +16,11 @@ export type Beat = {
     _id: string;
     username: string;
   };
+  createdAt: string;
+  averageRating?: number | null;
+  ratingsCount?: number | null;
 };
+
 
 // Теперь используй его в RootStackParamList
 export type RootStackParamList = {

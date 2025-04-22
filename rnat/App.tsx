@@ -7,26 +7,30 @@ import LoginScreen from './LoginScreen';
 import RegisterScreen from './RegisterScreen';
 import HomeScreen from './HomeScreen';
 import BeatDetailsScreen from './BeatDetailsScreen';
-// import AddBeatScreen from './AddBeatScreen';
-import { View, Text } from 'react-native';
 import MyBeatsScreen from './MyBeatsScreen';
 import EditBeatScreen from './EditBeatScreen';
 import ProfileScreen from './ProfileScreen';
 import AddBeatScreen from './AddBeatScreen';
 import LikedBeatsScreen from './LikedBeatsScreen';
-// Заглушка для экранов, если потребуется
-const PlaceholderScreen = ({ title }: { title: string }) => (
-  <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-    <Text>{title}</Text>
-  </View>
-);
+import AllBeatsScreen from './AllBeatsScreen';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+
 const MainTabs = () => (
-  <Tab.Navigator screenOptions={{ headerShown: false }}>
+  <Tab.Navigator 
+    screenOptions={{ 
+      headerShown: false,
+      tabBarActiveTintColor: '#000',
+      tabBarInactiveTintColor: '#888',
+      tabBarStyle: {
+        paddingBottom: 5,
+        height: 60,
+      }
+    }}
+  >
     <Tab.Screen name="Home" component={HomeScreen} />
-    <Tab.Screen name="Categories" component={() => <PlaceholderScreen title="Categories" />} />
+    <Tab.Screen name="Explore" component={AllBeatsScreen} />
     <Tab.Screen name="Add" component={MyBeatsScreen} />
     <Tab.Screen name="Rated" component={LikedBeatsScreen} />
     <Tab.Screen name="Profile" component={ProfileScreen} />
@@ -39,6 +43,7 @@ const AppContent = () => {
     throw new Error('AuthContext не был предоставлен');
   }
   const { isAuthenticated } = authContext;
+  
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
@@ -57,7 +62,7 @@ const AppContent = () => {
         <Stack.Screen
           name="EditBeat"
           component={EditBeatScreen as React.ComponentType<any>}
-           options={{ headerShown: true, title: 'Редактировать бит' }}
+          options={{ headerShown: true, title: 'Редактировать бит' }}
         />
         <Stack.Screen
           name="AddBeat"
