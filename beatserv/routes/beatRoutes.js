@@ -51,18 +51,54 @@ const storage = multer.diskStorage({
 const upload = multer({ storage });
 router.get('/liked', authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.userId;              // берём userId из токена
-    const score = parseInt(req.query.score);     // значение оценки из query
+    const userId = req.user.userId;
+    const { 
+      search = '',
+      score,
+      page = 1, 
+      limit = 20 
+    } = req.query;
 
-    const query = { user: userId };
-    if (!isNaN(score)) query.value = score;     
+    // Находим все оценки пользователя
+    const ratingQuery = { user: userId };
+    if (score) ratingQuery.value = parseInt(score);
 
-    const ratings = await Rating.find(query).select('beat');
+    const ratings = await Rating.find(ratingQuery).select('beat');
     const beatIds = ratings.map(r => r.beat);
 
-    const beats = await Beat.find({ _id: { $in: beatIds } });
+    if (beatIds.length === 0) {
+      return res.json({
+        beats: [],
+        totalPages: 0,
+        currentPage: 1,
+        totalBeats: 0
+      });
+    }
 
-    res.json(beats);
+    // Формируем запрос для битов
+    const beatQuery = { _id: { $in: beatIds } };
+    
+    if (search) {
+      beatQuery.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { author: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    const [beats, count] = await Promise.all([
+      Beat.find(beatQuery)
+        .sort('-createdAt')
+        .skip((page - 1) * limit)
+        .limit(limit),
+      Beat.countDocuments(beatQuery)
+    ]);
+
+    res.json({
+      beats,
+      totalPages: Math.ceil(count / limit),
+      currentPage: page,
+      totalBeats: count
+    });
   } catch (err) {
     console.error('Ошибка сервера в /liked:', err);
     res.status(500).json({ message: 'Ошибка сервера' });

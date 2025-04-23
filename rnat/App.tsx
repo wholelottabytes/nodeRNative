@@ -13,6 +13,7 @@ import ProfileScreen from './ProfileScreen';
 import AddBeatScreen from './AddBeatScreen';
 import LikedBeatsScreen from './LikedBeatsScreen';
 import AllBeatsScreen from './AllBeatsScreen';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -45,6 +46,7 @@ const AppContent = () => {
   const { isAuthenticated } = authContext;
   
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {isAuthenticated ? (
@@ -71,6 +73,7 @@ const AppContent = () => {
         />
       </Stack.Navigator>
     </NavigationContainer>
+    </GestureHandlerRootView>
   );
 };
 

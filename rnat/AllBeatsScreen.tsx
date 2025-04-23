@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
-  FlatList,
   TouchableOpacity,
   StyleSheet,
   TextInput,
   ActivityIndicator,
   Alert,
-  Image
+  Image,
+  SafeAreaView,
+  ScrollView,
+  RefreshControl
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { HomeScreenNavigationProp } from './type.ts';
@@ -39,6 +41,8 @@ interface ApiResponse {
   totalBeats: number;
 }
 
+const SERVER = `http://${config.serverIP}:5000`;
+
 const AllBeatsScreen = () => {
   const [beats, setBeats] = useState<Beat[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -46,23 +50,19 @@ const AllBeatsScreen = () => {
   const [maxPrice, setMaxPrice] = useState('1000');
   const [tagsQuery, setTagsQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalBeats, setTotalBeats] = useState(0);
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   const navigation = useNavigation<HomeScreenNavigationProp>();
-  const flatListRef = useRef<FlatList<Beat>>(null);
 
   const fetchBeats = useCallback(async (pageNum = 1, isRefreshing = false) => {
     try {
       if (isRefreshing) {
-        setIsRefreshing(true);
+        setRefreshing(true);
       } else if (pageNum === 1) {
         setIsLoading(true);
-      } else {
-        setIsLoadingMore(true);
       }
 
       const params = new URLSearchParams();
@@ -72,7 +72,7 @@ const AllBeatsScreen = () => {
       if (tagsQuery) params.append('tags', tagsQuery);
       params.append('page', pageNum.toString());
 
-      const response = await fetch(`http://${config.serverIP}:5000/beats/?${params.toString()}`);
+      const response = await fetch(`${SERVER}/beats/?${params.toString()}`);
 
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
@@ -94,8 +94,7 @@ const AllBeatsScreen = () => {
       Alert.alert('Error', 'Failed to load beats. Please try again.');
     } finally {
       setIsLoading(false);
-      setIsRefreshing(false);
-      setIsLoadingMore(false);
+      setRefreshing(false);
     }
   }, [searchQuery, minPrice, maxPrice, tagsQuery]);
 
@@ -103,34 +102,25 @@ const AllBeatsScreen = () => {
     fetchBeats(1);
   }, [fetchBeats]);
 
-  const handleRefresh = () => {
+  const handleRefresh = useCallback(() => {
     fetchBeats(1, true);
-  };
+  }, [fetchBeats]);
 
-  const handleLoadMore = () => {
-    if (!isLoadingMore && page < totalPages) {
+  const handleLoadMore = useCallback(() => {
+    if (page < totalPages) {
       fetchBeats(page + 1);
     }
-  };
+  }, [fetchBeats, page, totalPages]);
 
-  const getItemLayout = useCallback(
-    (data: ArrayLike<Beat> | null | undefined, index: number) => ({
-      length: 110,
-      offset: 110 * index,
-      index,
-    }),
-    []
-  );
-
-  const renderBeatItem = useCallback(({ item }: { item: Beat }) => (
+  const renderBeatItem = (item: Beat) => (
     <TouchableOpacity
+      key={item._id}
       style={styles.beatCard}
       onPress={() => navigation.navigate('BeatDetails', { beat: item })}
     >
       <Image
-        source={{ uri: item.imageUrl ? `http://${config.serverIP}:5000/${item.imageUrl}` : 'https://via.placeholder.com/150' }}
+        source={{ uri: item.imageUrl ? `${SERVER}/${item.imageUrl}` : 'https://via.placeholder.com/150' }}
         style={styles.beatImage}
-        onError={() => console.log("Image load error")}
       />
       <View style={styles.beatInfo}>
         <Text style={styles.beatTitle}>{item.title}</Text>
@@ -146,99 +136,111 @@ const AllBeatsScreen = () => {
         </Text>
       </View>
     </TouchableOpacity>
-  ), [navigation]);
-
-  const renderFooter = () => {
-    if (!isLoadingMore) return null;
-    return (
-      <View style={styles.footer}>
-        <ActivityIndicator size="small" color="#000" />
-      </View>
-    );
-  };
+  );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.searchContainer}>
-        <TextInput
-          style={styles.searchInput}
-          placeholder="Search in title, description, author..."
-          placeholderTextColor="#888"
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-        />
-      </View>
-
-      <View style={styles.filtersContainer}>
-        <TextInput
-          style={styles.filterInput}
-          placeholder="Min price"
-          placeholderTextColor="#888"
-          value={minPrice}
-          onChangeText={setMinPrice}
-          keyboardType="numeric"
-        />
-        <TextInput
-          style={styles.filterInput}
-          placeholder="Max price"
-          placeholderTextColor="#888"
-          value={maxPrice}
-          onChangeText={setMaxPrice}
-          keyboardType="numeric"
-        />
-        <TextInput
-          style={styles.filterInput}
-          placeholder="Tags (comma separated)"
-          placeholderTextColor="#888"
-          value={tagsQuery}
-          onChangeText={setTagsQuery}
-        />
-      </View>
-
-      {isLoading && page === 1 ? (
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color="#000" />
-        </View>
-      ) : (
-        <FlatList
-          ref={flatListRef}
-          data={beats}
-          keyExtractor={(item) => item._id}
-          renderItem={renderBeatItem}
-          contentContainerStyle={styles.listContainer}
-          ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              No beats found. Try different search criteria.
-            </Text>
+    <SafeAreaView style={styles.safeArea}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="#000"
+          />
+        }
+        onScroll={({ nativeEvent }) => {
+          if (nativeEvent.contentOffset.y + nativeEvent.layoutMeasurement.height >= nativeEvent.contentSize.height - 50) {
+            handleLoadMore();
           }
-          ListFooterComponent={renderFooter}
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.5}
-          refreshing={isRefreshing}
-          onRefresh={handleRefresh}
-          getItemLayout={getItemLayout}
-          initialNumToRender={10}
-          windowSize={10}
-        />
-      )}
+        }}
+        scrollEventThrottle={400}
+      >
+        <View style={styles.container}>
+          <Text style={styles.screenTitle}>All Beats</Text>
+          
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search in title, description, author..."
+              placeholderTextColor="#888"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
 
-      <Text style={styles.resultsText}>
-        Showing {beats.length} of {totalBeats} beats
-      </Text>
-    </View>
+          <View style={styles.filtersContainer}>
+            <TextInput
+              style={styles.filterInput}
+              placeholder="Min price"
+              placeholderTextColor="#888"
+              value={minPrice}
+              onChangeText={setMinPrice}
+              keyboardType="numeric"
+            />
+            <TextInput
+              style={styles.filterInput}
+              placeholder="Max price"
+              placeholderTextColor="#888"
+              value={maxPrice}
+              onChangeText={setMaxPrice}
+              keyboardType="numeric"
+            />
+            <TextInput
+              style={styles.filterInput}
+              placeholder="Tags (comma separated)"
+              placeholderTextColor="#888"
+              value={tagsQuery}
+              onChangeText={setTagsQuery}
+            />
+          </View>
+
+          {isLoading ? (
+            <ActivityIndicator size="large" color="#000" style={styles.loader} />
+          ) : (
+            <View style={styles.beatsList}>
+              {beats.map(renderBeatItem)}
+              {beats.length === 0 && (
+                <Text style={styles.emptyText}>No beats found. Try different search criteria.</Text>
+              )}
+            </View>
+          )}
+
+          {!isLoading && page < totalPages && (
+            <TouchableOpacity 
+              style={styles.loadMoreButton} 
+              onPress={handleLoadMore}
+            >
+              <Text style={styles.loadMoreText}>Load More</Text>
+            </TouchableOpacity>
+          )}
+
+          <Text style={styles.resultsText}>
+            Showing {beats.length} of {totalBeats} beats
+          </Text>
+        </View>
+      </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    padding: 15,
     backgroundColor: '#fff',
   },
-  centerContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+  scrollContainer: {
+    flexGrow: 1,
+  },
+  container: {
+    padding: 16,
+  },
+  screenTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#000',
+    marginBottom: 20,
+    textAlign: 'center',
   },
   searchContainer: {
     marginBottom: 10,
@@ -264,8 +266,11 @@ const styles = StyleSheet.create({
     color: '#333',
     marginHorizontal: 5,
   },
-  listContainer: {
-    paddingBottom: 20,
+  loader: {
+    marginVertical: 40,
+  },
+  beatsList: {
+    marginBottom: 16,
   },
   beatCard: {
     flexDirection: 'row',
@@ -324,10 +329,16 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 16,
   },
-  footer: {
-    padding: 10,
-    justifyContent: 'center',
+  loadMoreButton: {
+    backgroundColor: '#000',
+    padding: 12,
+    borderRadius: 8,
     alignItems: 'center',
+    marginVertical: 16,
+  },
+  loadMoreText: {
+    color: '#fff',
+    fontWeight: '600',
   },
   resultsText: {
     textAlign: 'center',
