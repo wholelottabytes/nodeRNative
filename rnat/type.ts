@@ -31,6 +31,8 @@ export type RootStackParamList = {
   EditBeat: { beat: any };
   AddBeat: undefined;
   BeatDetails: { beat: Beat }; // вот он
+  UserProfile: { username: string };
+  
 };
 
 
@@ -60,4 +62,19 @@ export type LikedBeatsScreenProps = {
 export type EditBeatScreenProps = {
   route: EditBeatScreenRouteProp;
   navigation: EditBeatScreenNavigationProp;
+};
+
+export type UserProfileScreenNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'UserProfile'
+>;
+
+export type UserProfileScreenRouteProp = RouteProp<
+  RootStackParamList,
+  'UserProfile'
+>;
+
+export type UserProfileScreenProps = {
+  route: UserProfileScreenRouteProp;
+  navigation: UserProfileScreenNavigationProp;
 };

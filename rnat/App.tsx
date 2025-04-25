@@ -13,6 +13,7 @@ import ProfileScreen from './ProfileScreen';
 import AddBeatScreen from './AddBeatScreen';
 import LikedBeatsScreen from './LikedBeatsScreen';
 import AllBeatsScreen from './AllBeatsScreen';
+import UserProfileScreen from './UserProfileScreen';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 const Stack = createNativeStackNavigator();
@@ -71,6 +72,11 @@ const AppContent = () => {
           component={AddBeatScreen as React.ComponentType<any>}
           options={{ headerShown: true, title: 'Добавить бит' }}
         />
+        <Stack.Screen
+  name="UserProfile"
+  component={UserProfileScreen as React.ComponentType<any>}
+  options={{ headerShown: false, title: 'Профиль пользователя' }}
+/>
       </Stack.Navigator>
     </NavigationContainer>
     </GestureHandlerRootView>

@@ -18,6 +18,36 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// GET Beats by user ID с пагинацией
+router.get("/profile", authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+
+    // Получаем данные пользователя
+    const user = await User.findById(userId).select("username avatar description");
+
+    if (!user) {
+      return res.status(404).json({ message: "Пользователь не найден" });
+    }
+
+    // Получаем все биты пользователя
+    const beats = await Beat.find({ user: userId })
+      .select("title description price tags imageUrl audioUrl createdAt")
+      .populate("user", "username");
+
+    res.json({
+      user: {
+        username: user.username,
+        avatar: user.avatar,  // предполагается, что это поле содержит ссылку на аватарку
+        description: user.description
+      },
+      beats
+    });
+  } catch (err) {
+    console.error('Ошибка при получении данных профиля:', err);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
 // Получение профиля
 router.get("/", authenticateToken, async (req, res) => {
   try {
