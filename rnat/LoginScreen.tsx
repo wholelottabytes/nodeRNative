@@ -48,7 +48,7 @@ const LoginScreen: React.FC<Props> = ({ navigation }) => {
     setIsLoading(true);
 
     try {
-      const response = await axios.post(`http://192.168.8.12:5000/auth/login`, { 
+      const response = await axios.post(`http://${config.serverIP}:5000/auth/login`, { 
         username: formattedUsername, 
         password: trimmedPassword 
       });

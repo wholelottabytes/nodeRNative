@@ -8,6 +8,7 @@ const authRoutes = require("./routes/authRoutes");
 const beatRoutes = require("./routes/beatRoutes");
 const profileRoutes = require('./routes/profileRoutes');
 const usersRoutes = require('./routes/users');
+const commentRoutes = require('./routes/comments');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -28,6 +29,7 @@ app.use("/auth", authRoutes);
 app.use("/beats", beatRoutes);
 app.use('/profile', profileRoutes);
 app.use('/users', usersRoutes);
+app.use('/comments', commentRoutes);
 
 app.listen(PORT, '0.0.0.0', () => console.log(`Сервер запущен на порту ${PORT}`));
 

@@ -20,8 +20,9 @@ const authMiddleware = (req, res, next) => {
     }
 
     try {
-        const decoded = jwt.verify(token, SECRET_KEY); // { userId, username, ... }
-        req.user = { id: decoded.userId }; // сохраняем userId для дальнейшего использования
+        const decoded = jwt.verify(token, SECRET_KEY);
+        // Сохраняем userId в req.user.userId для единообразия
+        req.user = { userId: decoded.userId };
         next();
     } catch (error) {
         console.error("Ошибка верификации токена:", error.message);

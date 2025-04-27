@@ -8,6 +8,7 @@ const multer = require("multer");
 const path = require("path");
 const Transaction = require("../models/Transaction");
 const Rating = require('../models/Rating'); 
+const Comment = require("../models/Comment");
 const SECRET_KEY = process.env.JWT_SECRET;
 
 if (!SECRET_KEY) {
@@ -240,20 +241,34 @@ router.post("/buy/:beatId", authMiddleware, async (req, res) => {
     const beatId = req.params.beatId;
     const buyerId = req.user.userId;
 
+    // Проверяем, есть ли уже покупка этого бита пользователем
+    const existingTransaction = await Transaction.findOne({
+      beat: beatId,
+      buyer: buyerId
+    });
+
+    if (existingTransaction) {
+      return res.status(400).json({ error: "Вы уже купили этот бит" });
+    }
+
     const beat = await Beat.findById(beatId).populate("user");
     if (!beat) return res.status(404).json({ error: "Бит не найден" });
 
     const seller = beat.user;
-    if (seller._id.toString() === buyerId)
+    if (seller._id.toString() === buyerId) {
       return res.status(400).json({ error: "Нельзя купить свой собственный бит" });
+    }
 
     const buyer = await User.findById(buyerId);
     const admin = await User.findOne({ username: "admin0" });
 
-    if (!buyer || !admin) return res.status(404).json({ error: "Покупатель или админ не найден" });
+    if (!buyer || !admin) {
+      return res.status(404).json({ error: "Покупатель или админ не найден" });
+    }
 
-    if (buyer.balance < beat.price)
+    if (buyer.balance < beat.price) {
       return res.status(400).json({ error: "Недостаточно средств" });
+    }
 
     // Расчёт
     const commission = +(beat.price * 0.03).toFixed(2);
@@ -279,13 +294,16 @@ router.post("/buy/:beatId", authMiddleware, async (req, res) => {
 
     await transaction.save();
 
-    res.status(200).json({ message: "Покупка завершена", transaction });
+    res.status(200).json({ 
+      message: "Покупка завершена", 
+      transaction,
+      newBalance: buyer.balance
+    });
   } catch (error) {
     console.error("Ошибка при покупке бита:", error);
     res.status(500).json({ error: "Ошибка сервера" });
   }
 });
-
 
 
 router.post("/upload-image", authMiddleware, upload.single("image"), (req, res) => {
@@ -492,25 +510,97 @@ router.put("/:id", authMiddleware, async (req, res) => {
 
 // Удалить бит (если владелец или админ)
 router.delete("/:id", authMiddleware, async (req, res) => {
-    try {
-        const userId = req.user.userId;
-        const beat = await Beat.findById(req.params.id);
-        if (!beat) return res.status(404).json({ error: "Бит не найден" });
+  try {
+    const userId = req.user.userId;
+    const beatId = req.params.id;
 
-        const existingUser = await User.findById(userId);
-        if (!existingUser) return res.status(404).json({ error: "Пользователь не найден" });
-
-        const isOwner = beat.user.toString() === userId;
-        const isAdmin = existingUser.username === 'admin0';
-
-        if (!isOwner && !isAdmin) {
-            return res.status(403).json({ error: "Нет прав на удаление" });
-        }
-
-        await Beat.findByIdAndDelete(req.params.id);
-        res.json({ message: "Бит удалён" });
-    } catch (error) {
-        res.status(500).json({ error: "Ошибка при удалении бита" });
+    // Находим бит
+    const beat = await Beat.findById(beatId);
+    if (!beat) {
+      return res.status(404).json({ 
+        success: false,
+        error: "Beat not found",
+        message: "The requested beat does not exist"
+      });
     }
+
+    // Проверяем пользователя
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        error: "User not found",
+        message: "User account not found"
+      });
+    }
+
+    // Проверяем права
+    const isOwner = beat.user.toString() === userId;
+    const isAdmin = user.username === 'admin0';
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ 
+        success: false,
+        error: "Forbidden",
+        message: "You don't have permission to delete this beat"
+      });
+    }
+
+    // Проверяем наличие покупок
+    const purchasesCount = await Transaction.countDocuments({ beat: beatId });
+    if (purchasesCount > 0) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Beat has purchases",
+        message: `Cannot delete beat - it has been purchased ${purchasesCount} time(s)`
+      });
+    }
+
+    // Удаляем связанные данные
+    await Rating.deleteMany({ beat: beatId });
+    await Comment.deleteMany({ beat: beatId });
+
+    // Удаляем файлы
+    try {
+      const fs = require('fs');
+      const path = require('path');
+      
+      if (beat.audioUrl) {
+        const audioPath = path.join(__dirname, '../assets/audio', path.basename(beat.audioUrl));
+        if (fs.existsSync(audioPath)) {
+          fs.unlinkSync(audioPath);
+        }
+      }
+      
+      if (beat.imageUrl) {
+        const imagePath = path.join(__dirname, '../assets/image', path.basename(beat.imageUrl));
+        if (fs.existsSync(imagePath)) {
+          fs.unlinkSync(imagePath);
+        }
+      }
+    } catch (fileError) {
+      console.error('File deletion error:', fileError);
+      return res.status(500).json({
+        success: false,
+        error: "File deletion failed",
+        message: "Beat data deleted but files could not be removed"
+      });
+    }
+
+    // Удаляем сам бит
+    await Beat.findByIdAndDelete(beatId);
+
+    res.json({ 
+      success: true,
+      message: "Beat and all related data deleted successfully"
+    });
+
+  } catch (error) {
+    console.error('Error deleting beat:', error);
+    res.status(500).json({
+      success: false,
+      error: "Server error",
+      message: "An unexpected error occurred while deleting the beat"
+    });
+  }
 });
 module.exports = router;

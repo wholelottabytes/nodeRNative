@@ -2,7 +2,7 @@ const express = require("express");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const User = require("../models/User");
-
+const authMiddleware = require('../auth');
 const router = express.Router();
 const SECRET_KEY = process.env.JWT_SECRET;
 
@@ -65,6 +65,18 @@ router.post("/login", async (req, res) => {
     }
 });
 
+router.get('/me', authMiddleware, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'Пользователь не найден' });
+    }
+    res.json(user);
+  } catch (error) {
+    console.error('Error fetching user data:', error);
+    res.status(500).json({ message: 'Ошибка сервера' });
+  }
+});
 
 
 module.exports = router;

@@ -8,11 +8,13 @@ import {
   Easing, 
   Dimensions,
   Alert,
-  ScrollView
+  ScrollView,
+  TextInput,
+  ActivityIndicator
 } from 'react-native';
 import Slider from '@react-native-community/slider';
 import Video, { OnLoadData, OnProgressData } from 'react-native-video';
-import { Star, Play, Pause, ShoppingCart } from 'react-native-feather';
+import { Star, Play, Pause, ShoppingCart, Edit2, Trash2, Check, X } from 'react-native-feather';
 import LinearGradient from 'react-native-linear-gradient';
 import { BeatDetailsScreenProps } from './type';
 import config from './config';
@@ -26,6 +28,21 @@ interface VideoRefType {
   seek: (time: number) => void;
 }
 
+interface Comment {
+  _id: string;
+  text: string;
+  username: string;
+  createdAt: string;
+  user: string;
+}
+
+interface CommentsResponse {
+  comments: Comment[];
+  totalPages: number;
+  currentPage: number;
+  totalComments: number;
+}
+
 const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation }) => {
   const { beat } = route.params;
   const [isPlaying, setIsPlaying] = useState(false);
@@ -33,6 +50,15 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
   const [duration, setDuration] = useState(0);
   const [rating, setRating] = useState(0);
   const [averageRating, setAverageRating] = useState<number | null>(null);
+  const [user, setUser] = useState<{username: string} | null>(null);
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [commentText, setCommentText] = useState('');
+  const [commentsPage, setCommentsPage] = useState(1);
+  const [totalCommentsPages, setTotalCommentsPages] = useState(1);
+  const [totalComments, setTotalComments] = useState(0);
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editedCommentText, setEditedCommentText] = useState('');
+  const [isLoadingComments, setIsLoadingComments] = useState(false);
   
   const floatAnim = useRef(new Animated.Value(0)).current;
   const [isArtworkLoaded, setIsArtworkLoaded] = useState(false);
@@ -67,6 +93,21 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
     outputRange: [-15, 15]
   });
 
+  const fetchUserData = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      const response = await axios.get(
+        `http://${config.serverIP}:5000/auth/me`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setUser(response.data);
+    } catch (error) {
+      console.error('Error fetching user data:', error);
+    }
+  }, []);
+
   const fetchRatings = useCallback(async () => {
     try {
       const token = await AsyncStorage.getItem('token');
@@ -84,9 +125,37 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
     }
   }, [beat._id]);
 
+  const fetchComments = useCallback(async () => {
+    setIsLoadingComments(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const response = await axios.get<CommentsResponse>(
+        `http://${config.serverIP}:5000/comments/beat/${beat._id}`,
+        {
+          params: { page: commentsPage, limit: 10 },
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        }
+      );
+
+      setComments(response.data.comments);
+      setTotalCommentsPages(response.data.totalPages);
+      setTotalComments(response.data.totalComments);
+    } catch (error) {
+      console.error('Error fetching comments:', error);
+      Alert.alert('Error', 'Failed to load comments');
+    } finally {
+      setIsLoadingComments(false);
+    }
+  }, [beat._id, commentsPage]);
+
   useEffect(() => {
+    fetchUserData();
     fetchRatings();
-  }, [fetchRatings]);
+  }, [fetchUserData, fetchRatings]);
+
+  useEffect(() => {
+    fetchComments();
+  }, [fetchComments]);
 
   const handleRate = async (value: number) => {
     try {
@@ -131,6 +200,156 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
       Alert.alert('Error', error.response?.data?.error || 'Purchase failed');
     }
   };
+const handleDeleteBeat = async () => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    if (!token) {
+      Alert.alert('Error', 'Authorization required');
+      return;
+    }
+
+    Alert.alert(
+      'Confirm Deletion',
+      'Are you sure you want to delete this beat? This action cannot be undone.',
+      [
+        {
+          text: 'Cancel',
+          style: 'cancel',
+        },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              const response = await axios.delete(
+                `http://${config.serverIP}:5000/beats/${beat._id}`,
+                { 
+                  headers: { Authorization: `Bearer ${token}` },
+                  timeout: 10000 // 10 секунд таймаут
+                }
+              );
+
+              if (response.data.success) {
+                Alert.alert('Success', response.data.message);
+                navigation.goBack();
+              } else {
+                Alert.alert('Error', response.data.message || 'Failed to delete beat');
+              }
+              
+            } catch (error) {
+              let errorMessage = 'Failed to delete beat';
+              
+              if (axios.isAxiosError(error)) {
+                // Обработка ошибок axios
+                if (error.response) {
+                  // Сервер ответил с кодом ошибки
+                  errorMessage = error.response.data.message || 
+                               error.response.data.error || 
+                               error.response.statusText;
+                } else if (error.request) {
+                  // Запрос был сделан, но ответ не получен
+                  errorMessage = 'No response from server';
+                } else {
+                  // Ошибка при настройке запроса
+                  errorMessage = error.message;
+                }
+              } else if (error instanceof Error) {
+                // Стандартные ошибки JavaScript
+                errorMessage = error.message;
+              }
+
+              Alert.alert(
+                'Error', 
+                errorMessage,
+                [{ text: 'OK', onPress: () => console.error('Delete error:', error) }]
+              );
+            }
+          },
+        },
+      ],
+      { cancelable: true }
+    );
+  } catch (error) {
+    Alert.alert(
+      'Error', 
+      'Failed to initiate deletion',
+      [{ text: 'OK', onPress: () => console.error('Init error:', error) }]
+    );
+  }
+};
+  const handleAddComment = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) {
+        Alert.alert('Error', 'Authorization required');
+        return;
+      }
+
+      await axios.post(
+        `http://${config.serverIP}:5000/comments`,
+        { text: commentText, beatId: beat._id },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setCommentText('');
+      fetchComments();
+    } catch (error) {
+      console.error('Error adding comment:', error);
+      Alert.alert('Error', 'Failed to add comment');
+    }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      await axios.delete(
+        `http://${config.serverIP}:5000/comments/${commentId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      fetchComments();
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      Alert.alert('Error', 'Failed to delete comment');
+    }
+  };
+
+  const handleEditComment = async (commentId: string) => {
+    if (!editedCommentText.trim()) {
+      Alert.alert('Error', 'Comment cannot be empty');
+      return;
+    }
+
+    try {
+      const token = await AsyncStorage.getItem('token');
+      if (!token) return;
+
+      await axios.put(
+        `http://${config.serverIP}:5000/comments/${commentId}`,
+        { text: editedCommentText },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setEditingCommentId(null);
+      setEditedCommentText('');
+      fetchComments();
+    } catch (error) {
+      console.error('Error editing comment:', error);
+      Alert.alert('Error', 'Failed to edit comment');
+    }
+  };
+
+  const startEditingComment = (comment: Comment) => {
+    setEditingCommentId(comment._id);
+    setEditedCommentText(comment.text);
+  };
+
+  const cancelEditing = () => {
+    setEditingCommentId(null);
+    setEditedCommentText('');
+  };
 
   const handleLoad = (data: OnLoadData) => {
     setDuration(data.duration);
@@ -151,6 +370,9 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
     videoRef.current?.seek(value);
     setCurrentTime(value);
   };
+
+  const isBeatOwner = user?.username === beat.user?.username || user?.username === beat.author;
+  const isAdmin = user?.username === 'admin0';
 
   return (
     <LinearGradient 
@@ -192,14 +414,23 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
 
         <View style={styles.content}>
           <Text style={styles.title}>{beat.title}</Text>
-         
-    <TouchableOpacity 
-  onPress={() => navigation.navigate('UserProfile', { username: beat.author })}
->
-  <Text style={styles.artist}>
-    by {beat.user?.username || beat.author || 'Unknown'}
-  </Text>
-</TouchableOpacity>
+          
+          <TouchableOpacity 
+            onPress={() => navigation.navigate('UserProfile', { username: beat.author })}
+          >
+            <Text style={styles.artist}>
+              by {beat.user?.username || beat.author || 'Unknown'}
+            </Text>
+          </TouchableOpacity>
+ {(isAdmin || isBeatOwner) && (
+            <TouchableOpacity 
+              style={styles.deleteButton}
+              onPress={handleDeleteBeat}
+            >
+              <Trash2 width={20} height={20} color="#fff" />
+              <Text style={styles.deleteButtonText}>Delete Beat</Text>
+            </TouchableOpacity>
+          )}
           <View style={styles.ratingContainer}>
             {[1, 2, 3, 4, 5].map((star) => (
               <TouchableOpacity 
@@ -281,6 +512,125 @@ const BeatDetailsScreen: React.FC<BeatDetailsScreenProps> = ({ route, navigation
                 </View>
               ))}
             </View>
+          </View>
+
+          {/* Comments Section */}
+          <View style={styles.commentsSection}>
+            <Text style={styles.sectionTitle}>Comments ({totalComments})</Text>
+            
+            {isLoadingComments ? (
+              <ActivityIndicator size="large" color="#fff" />
+            ) : (
+              <>
+                {comments.map(comment => (
+                  <View key={comment._id} style={styles.commentContainer}>
+                    <View style={styles.commentHeader}>
+                      <Text style={styles.commentAuthor}>{comment.username}</Text>
+                      <Text style={styles.commentDate}>
+                        {new Date(comment.createdAt).toLocaleString()}
+                      </Text>
+                    </View>
+                    
+                    {editingCommentId === comment._id ? (
+                      <>
+                        <TextInput
+                          value={editedCommentText}
+                          onChangeText={setEditedCommentText}
+                          style={styles.editCommentInput}
+                          multiline
+                        />
+                        <View style={styles.editButtons}>
+                          <TouchableOpacity 
+                            onPress={() => handleEditComment(comment._id)}
+                            style={styles.saveEditButton}
+                          >
+                            <Check width={18} height={18} color="#fff" />
+                          </TouchableOpacity>
+                          <TouchableOpacity 
+                            onPress={cancelEditing}
+                            style={styles.cancelEditButton}
+                          >
+                            <X width={18} height={18} color="#fff" />
+                          </TouchableOpacity>
+                        </View>
+                      </>
+                    ) : (
+                      <Text style={styles.commentText}>{comment.text}</Text>
+                    )}
+                    
+                    {/* Action buttons */}
+                    <View style={styles.commentActions}>
+                      {(user?.username === comment.username || isAdmin) && (
+                        <TouchableOpacity 
+                          onPress={() => handleDeleteComment(comment._id)}
+                          style={styles.commentActionButton}
+                        >
+                          <Trash2 width={16} height={16} color="#ff4444" />
+                        </TouchableOpacity>
+                      )}
+                      
+                      {/* Edit button - show for comment owner or beat owner (admin can already delete) */}
+                      {(user?.username === comment.username || (isBeatOwner && !isAdmin)) && (
+                        <TouchableOpacity 
+                          onPress={() => startEditingComment(comment)}
+                          style={styles.commentActionButton}
+                        >
+                          <Edit2 width={16} height={16} color="#888" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                  </View>
+                ))}
+
+                {/* Pagination */}
+                {comments.length > 0 && (
+                  <View style={styles.pagination}>
+                    <TouchableOpacity 
+                      onPress={() => setCommentsPage(p => Math.max(1, p - 1))}
+                      disabled={commentsPage === 1}
+                    >
+                      <Text style={[styles.paginationButton, commentsPage === 1 && styles.disabled]}>
+                        Previous
+                      </Text>
+                    </TouchableOpacity>
+                    
+                    <Text style={styles.pageInfo}>
+                      Page {commentsPage} of {totalCommentsPages}
+                    </Text>
+                    
+                    <TouchableOpacity 
+                      onPress={() => setCommentsPage(p => Math.min(totalCommentsPages, p + 1))}
+                      disabled={commentsPage === totalCommentsPages}
+                    >
+                      <Text style={[styles.paginationButton, commentsPage === totalCommentsPages && styles.disabled]}>
+                        Next
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+                {/* Add comment form */}
+                {user && (
+                  <View style={styles.addCommentContainer}>
+                    <TextInput
+                      value={commentText}
+                      onChangeText={setCommentText}
+                      placeholder="Write a comment..."
+                      placeholderTextColor="#888"
+                      style={styles.commentInput}
+                      multiline
+                    />
+                    <TouchableOpacity 
+                      onPress={handleAddComment}
+                      disabled={!commentText.trim()}
+                      style={[styles.postButton, !commentText.trim() && styles.disabledButton]}
+                    >
+                      <Text style={styles.postButtonText}>Post</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
           </View>
         </View>
       </ScrollView>
@@ -370,6 +720,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 15,
   },
+    deleteButton: {
+    backgroundColor: '#ff4444',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 20,
+    marginBottom: 15,
+    alignSelf: 'center',
+  },
+  deleteButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
   playButton: {
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 40,
@@ -440,6 +805,113 @@ const styles = StyleSheet.create({
   tagText: {
     color: '#fff',
     fontSize: 12,
+  },
+  // Comments styles
+  commentsSection: {
+    marginTop: 30,
+    paddingHorizontal: 15,
+  },
+  sectionTitle: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 15,
+  },
+  commentContainer: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
+    padding: 15,
+    marginBottom: 15,
+  },
+  commentHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  commentAuthor: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  commentDate: {
+    color: '#888',
+    fontSize: 12,
+  },
+  commentText: {
+    color: '#ddd',
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  commentActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 10,
+    gap: 10,
+  },
+  commentActionButton: {
+    padding: 5,
+  },
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginVertical: 15,
+  },
+  paginationButton: {
+    color: '#fff',
+    padding: 10,
+  },
+  disabled: {
+    color: '#555',
+  },
+  pageInfo: {
+    color: '#888',
+  },
+  addCommentContainer: {
+    marginTop: 20,
+  },
+  commentInput: {
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    color: '#fff',
+    borderRadius: 10,
+    padding: 15,
+    minHeight: 80,
+    marginBottom: 10,
+    textAlignVertical: 'top',
+  },
+  editCommentInput: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    color: '#fff',
+    borderRadius: 5,
+    padding: 10,
+    marginBottom: 10,
+  },
+  editButtons: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+  },
+  saveEditButton: {
+    backgroundColor: '#4CAF50',
+    padding: 5,
+    borderRadius: 5,
+  },
+  cancelEditButton: {
+    backgroundColor: '#f44336',
+    padding: 5,
+    borderRadius: 5,
+  },
+  postButton: {
+    backgroundColor: '#fff',
+    borderRadius: 20,
+    padding: 12,
+    alignItems: 'center',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  postButtonText: {
+    color: '#000',
+    fontWeight: 'bold',
   },
 });
 

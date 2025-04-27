@@ -10,12 +10,15 @@ import {
   SafeAreaView,
   ActivityIndicator,
   RefreshControl,
-  ScrollView
+  ScrollView,
+  Platform
 } from 'react-native';
 import axios from 'axios';
 import { launchImageLibrary } from 'react-native-image-picker';
+import { useNavigation } from '@react-navigation/native';
 import config from './config';
 import { AuthContext } from './AuthContext';
+import { UserProfileScreenProps, Beat } from './type';
 
 const SERVER_URL = `http://${config.serverIP}:5000`;
 
@@ -28,14 +31,43 @@ type UserProfile = {
 
 type Transaction = {
   id: string;
+  beatId: string;
   beatTitle: string;
   beatImage: string;
+  beatAudioUrl: string;
+  beatPrice: number;
+  beatDescription: string;
+  beatTags: string[];
+  beatAuthor: string;
   amount: number;
-  date: string;
+  date: string | Date;
   buyerUsername?: string;
 };
 
+type Pagination = {
+  page: number;
+  total: number;
+  totalPages: number;
+};
+
+const parseDateSafe = (dateString: string | Date | undefined): Date => {
+  try {
+    if (!dateString) return new Date();
+    if (dateString instanceof Date) return dateString;
+    
+    if (typeof dateString === 'string' && /[0-9a-fA-F]{24}/.test(dateString)) {
+      return new Date();
+    }
+    
+    const parsedDate = new Date(dateString);
+    return isNaN(parsedDate.getTime()) ? new Date() : parsedDate;
+  } catch {
+    return new Date();
+  }
+};
+
 const ProfileScreen = () => {
+  const navigation = useNavigation<UserProfileScreenProps['navigation']>();
   const auth = useContext(AuthContext);
   const user = auth?.user;
 
@@ -49,6 +81,13 @@ const ProfileScreen = () => {
   const [activeTab, setActiveTab] = useState<'purchases' | 'sales'>('purchases');
   const [isLoading, setIsLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [pagination, setPagination] = useState<{
+    purchases: Pagination;
+    sales: Pagination;
+  }>({
+    purchases: { page: 1, total: 0, totalPages: 1 },
+    sales: { page: 1, total: 0, totalPages: 1 }
+  });
 
   const fetchProfile = useCallback(async () => {
     if (!user) return;
@@ -60,29 +99,51 @@ const ProfileScreen = () => {
       setProfile(res.data);
       setDescription(res.data.description || '');
     } catch (e) {
-      console.error('Error fetching profile', e);
       Alert.alert('Error', 'Failed to load profile');
     } finally {
       setIsLoading(false);
     }
   }, [user]);
 
-  const fetchTransactions = useCallback(async () => {
+  const fetchTransactions = useCallback(async (tab: 'purchases' | 'sales', pageNum = 1) => {
     if (!user) return;
     try {
-      const res = await axios.get<{ purchases: Transaction[]; sales: Transaction[] }>(
-        `${SERVER_URL}/profile/transactions`,
-        { headers: { Authorization: `Bearer ${user.token}` } }
-      );
-      setTransactions(res.data);
+      const res = await axios.get<{
+        transactions: Transaction[];
+        total: number;
+        page: number;
+        totalPages: number;
+      }>(`${SERVER_URL}/profile/transactions`, {
+        params: { type: tab, page: pageNum, limit: 5 },
+        headers: { Authorization: `Bearer ${user.token}` }
+      });
+      
+      setTransactions(prev => ({
+        ...prev,
+        [tab]: pageNum === 1 
+          ? res.data.transactions 
+          : [...prev[tab], ...res.data.transactions]
+      }));
+      
+      setPagination(prev => ({
+        ...prev,
+        [tab]: {
+          page: res.data.page,
+          total: res.data.total,
+          totalPages: res.data.totalPages
+        }
+      }));
     } catch (e) {
-      console.error('Error fetching transactions', e);
       Alert.alert('Error', 'Failed to load transactions');
     }
   }, [user]);
 
   const loadData = useCallback(async () => {
-    await Promise.all([fetchProfile(), fetchTransactions()]);
+    await Promise.all([
+      fetchProfile(),
+      fetchTransactions('purchases'),
+      fetchTransactions('sales')
+    ]);
   }, [fetchProfile, fetchTransactions]);
 
   const onRefresh = useCallback(async () => {
@@ -95,22 +156,12 @@ const ProfileScreen = () => {
     loadData();
   }, [loadData]);
 
-  if (!auth || !user) {
-    return (
-      <View style={styles.centerContainer}>
-        <Text style={styles.message}>Please log in</Text>
-      </View>
-    );
-  }
-
-  const { logout } = auth;
-
   const updateDescription = async () => {
     try {
       await axios.put(
         `${SERVER_URL}/profile/description`,
         { description },
-        { headers: { Authorization: `Bearer ${user.token}` } }
+        { headers: { Authorization: `Bearer ${user?.token}` } }
       );
       Alert.alert('Success', 'Description updated');
       fetchProfile();
@@ -128,7 +179,7 @@ const ProfileScreen = () => {
       await axios.put(
         `${SERVER_URL}/profile/balance`,
         { amount: Number(amount) },
-        { headers: { Authorization: `Bearer ${user.token}` } }
+        { headers: { Authorization: `Bearer ${user?.token}` } }
       );
       Alert.alert('Success', 'Balance updated');
       setAmount('');
@@ -147,7 +198,7 @@ const ProfileScreen = () => {
       try {
         await axios.put(`${SERVER_URL}/profile/photo`, formData, {
           headers: {
-            Authorization: `Bearer ${user.token}`,
+            Authorization: `Bearer ${user?.token}`,
             'Content-Type': 'multipart/form-data',
           },
         });
@@ -159,31 +210,78 @@ const ProfileScreen = () => {
     }
   };
 
-  const renderTransaction = (item: Transaction) => (
-    <TouchableOpacity 
-      style={styles.transactionCard} 
-      key={item.id}
-      onPress={() => {/* navigation to beat details */}}
-    >
-      <Image 
-        source={{ uri: item.beatImage ? `${SERVER_URL}/${item.beatImage}` : 'https://via.placeholder.com/150' }} 
-        style={styles.transactionImage}
-      />
-      <View style={styles.transactionInfo}>
-        <Text style={styles.transactionTitle}>{item.beatTitle}</Text>
-        {item.buyerUsername && (
-          <Text style={styles.transactionBuyer}>Buyer: {item.buyerUsername}</Text>
-        )}
-        <Text style={styles.transactionAmount}>${item.amount.toFixed(2)}</Text>
-        <Text style={styles.transactionDate}>{new Date(item.date).toLocaleDateString()}</Text>
+  const handleBeatPress = (transaction: Transaction) => {
+    const transactionDate = parseDateSafe(transaction.date);
+    
+    const beat: Beat = {
+      _id: transaction.beatId || '',
+      title: transaction.beatTitle || 'Untitled',
+      imageUrl: transaction.beatImage || '',
+      audioUrl: transaction.beatAudioUrl || '',
+      price: transaction.beatPrice || 0,
+      description: transaction.beatDescription || '',
+      tags: transaction.beatTags || [],
+      author: transaction.beatAuthor || 'Unknown',
+      user: {
+        _id: '',
+        username: transaction.beatAuthor || 'Unknown'
+      },
+      createdAt: transactionDate.toISOString(),
+      averageRating: null,
+      ratingsCount: null
+    };
+    
+    navigation.navigate('BeatDetails', { beat });
+  };
+
+  const renderTransaction = (item: Transaction) => {
+    const transactionDate = parseDateSafe(item.date);
+    const formattedDate = transactionDate.toLocaleDateString('en-US', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    });
+
+    return (
+      <TouchableOpacity 
+        style={styles.transactionCard}
+        key={item.id}
+        onPress={() => handleBeatPress(item)}
+      >
+        <Image 
+          source={{ uri: item.beatImage ? `${SERVER_URL}/${item.beatImage}` : 'https://via.placeholder.com/150' }} 
+          style={styles.transactionImage}
+        />
+        <View style={styles.transactionInfo}>
+          <Text style={styles.transactionTitle} numberOfLines={1}>{item.beatTitle}</Text>
+          
+          {item.buyerUsername && (
+            <View style={styles.buyerContainer}>
+              <Text style={styles.transactionBuyer}>Buyer: {item.buyerUsername}</Text>
+            </View>
+          )}
+          
+          <View style={styles.transactionBottom}>
+            <Text style={styles.transactionAmount}>${item.amount.toFixed(2)}</Text>
+            <Text style={styles.transactionDate}>{formattedDate}</Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  if (!auth || !user) {
+    return (
+      <View style={styles.authContainer}>
+        <Text style={styles.authText}>Please log in to view profile</Text>
       </View>
-    </TouchableOpacity>
-  );
+    );
+  }
 
   if (!profile) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color="#000" />
+      <View style={styles.loaderContainer}>
+        <ActivityIndicator size="large" color="#000000" />
       </View>
     );
   }
@@ -191,12 +289,12 @@ const ProfileScreen = () => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#000"
+            colors={['#000000']}
+            tintColor="#000000"
           />
         }
       >
@@ -204,45 +302,53 @@ const ProfileScreen = () => {
         <View style={styles.profileHeader}>
           <TouchableOpacity onPress={uploadPhoto}>
             <Image
-              source={
-                profile.userPhoto
-                  ? { uri: `${SERVER_URL}/${profile.userPhoto}` }
-                  : require('./assets/default-avatar.png')
-              }
+              source={profile.userPhoto 
+                ? { uri: `${SERVER_URL}/${profile.userPhoto}` }
+                : require('./assets/default-avatar.png')}
               style={styles.avatar}
             />
           </TouchableOpacity>
           <Text style={styles.username}>{profile.username}</Text>
-          <Text style={styles.balance}>Balance: ${profile.balance?.toFixed(2) || '0.00'}</Text>
+          <View style={styles.balanceContainer}>
+            <Text style={styles.balance}>${profile.balance?.toFixed(2) || '0.00'}</Text>
+          </View>
         </View>
 
-        {/* Profile Info */}
+        {/* Profile Sections */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>About</Text>
+          <Text style={styles.sectionTitle}>About Me</Text>
           <TextInput
-            style={styles.input}
+            style={styles.descriptionInput}
             value={description}
             onChangeText={setDescription}
-            placeholder="Tell about yourself..."
+            placeholder="Tell your story..."
+            placeholderTextColor="#888"
             multiline
+            numberOfLines={4}
           />
-          <TouchableOpacity style={styles.blackButton} onPress={updateDescription}>
-            <Text style={styles.buttonText}>Update Description</Text>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={updateDescription}
+          >
+            <Text style={styles.buttonText}>Update Bio</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Balance Top Up */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Top Up Balance</Text>
+          <Text style={styles.sectionTitle}>Add Funds</Text>
           <TextInput
-            style={styles.input}
+            style={styles.amountInput}
             value={amount}
             onChangeText={setAmount}
-            placeholder="Amount"
+            placeholder="Enter amount"
+            placeholderTextColor="#888"
             keyboardType="numeric"
           />
-          <TouchableOpacity style={styles.blackButton} onPress={topUpBalance}>
-            <Text style={styles.buttonText}>Add Funds</Text>
+          <TouchableOpacity 
+            style={[styles.actionButton, styles.fundButton]}
+            onPress={topUpBalance}
+          >
+            <Text style={styles.buttonText}>Add to Balance</Text>
           </TouchableOpacity>
         </View>
 
@@ -252,30 +358,47 @@ const ProfileScreen = () => {
             style={[styles.tabButton, activeTab === 'purchases' && styles.activeTab]}
             onPress={() => setActiveTab('purchases')}
           >
-            <Text style={styles.tabText}>My Purchases</Text>
+            <Text style={[styles.tabText, activeTab === 'purchases' && styles.activeTabText]}>
+              My Purchases
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.tabButton, activeTab === 'sales' && styles.activeTab]}
             onPress={() => setActiveTab('sales')}
           >
-            <Text style={styles.tabText}>My Sales</Text>
+            <Text style={[styles.tabText, activeTab === 'sales' && styles.activeTabText]}>
+              My Sales
+            </Text>
           </TouchableOpacity>
         </View>
 
         {/* Transactions List */}
         <View style={styles.transactionsContainer}>
           {isLoading ? (
-            <ActivityIndicator size="large" color="#000" style={styles.loader} />
+            <ActivityIndicator size="large" color="#000000" style={styles.loader} />
           ) : (
-            (activeTab === 'purchases' ? transactions.purchases : transactions.sales).map(renderTransaction)
-          )}
-          {!isLoading && transactions[activeTab].length === 0 && (
-            <Text style={styles.emptyText}>No {activeTab} found</Text>
+            <>
+              {(activeTab === 'purchases' ? transactions.purchases : transactions.sales).map(renderTransaction)}
+              {!isLoading && transactions[activeTab].length === 0 && (
+                <Text style={styles.emptyText}>No {activeTab} found</Text>
+              )}
+              {pagination[activeTab].page < pagination[activeTab].totalPages && (
+                <TouchableOpacity 
+                  style={styles.loadMoreButton}
+                  onPress={() => fetchTransactions(activeTab, pagination[activeTab].page + 1)}
+                >
+                  <Text style={styles.loadMoreText}>Load More</Text>
+                </TouchableOpacity>
+              )}
+            </>
           )}
         </View>
 
         {/* Logout Button */}
-        <TouchableOpacity style={styles.logoutButton} onPress={logout}>
+        <TouchableOpacity 
+          style={styles.logoutButton}
+          onPress={() => auth.logout()}
+        >
           <Text style={styles.logoutText}>Log Out</Text>
         </TouchableOpacity>
       </ScrollView>
@@ -286,149 +409,233 @@ const ProfileScreen = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#FFFFFF',
   },
-  scrollContent: {
-    padding: 16,
-    paddingBottom: 32,
-  },
-  centerContainer: {
+  authContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#FFFFFF',
   },
-  message: {
+  authText: {
     fontSize: 16,
-    color: '#666',
+    color: '#000000',
+  },
+  loaderContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#FFFFFF',
   },
   profileHeader: {
+    paddingVertical: 32,
     alignItems: 'center',
-    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#EEEEEE',
   },
   avatar: {
     width: 120,
     height: 120,
     borderRadius: 60,
-    marginBottom: 12,
+    borderWidth: 3,
+    borderColor: '#000000',
   },
   username: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#000',
-    marginBottom: 4,
+    fontSize: 28,
+    fontWeight: '600',
+    color: '#000000',
+    marginTop: 16,
+  },
+  balanceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    backgroundColor: '#F5F5F5',
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
   },
   balance: {
     fontSize: 18,
-    color: '#333',
+    color: '#000000',
     fontWeight: '600',
+    marginLeft: 8,
   },
   section: {
-    marginBottom: 24,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    margin: 16,
+    padding: 20,
+    borderWidth: 1,
+    borderColor: '#EEEEEE',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#000',
-    marginBottom: 12,
+    color: '#000000',
+    marginBottom: 16,
   },
-  input: {
+  descriptionInput: {
     borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 12,
-    backgroundColor: '#fff',
-    color: '#000',
+    borderColor: '#EEEEEE',
+    borderRadius: 12,
+    padding: 16,
+    minHeight: 100,
+    fontSize: 16,
+    color: '#000000',
+    backgroundColor: '#FFFFFF',
+    textAlignVertical: 'top',
   },
-  blackButton: {
-    backgroundColor: '#000',
-    padding: 14,
-    borderRadius: 8,
+  amountInput: {
+    borderWidth: 1,
+    borderColor: '#EEEEEE',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 16,
+    color: '#000000',
+    backgroundColor: '#FFFFFF',
+  },
+  actionButton: {
+    backgroundColor: '#000000',
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
+    marginTop: 16,
+  },
+  fundButton: {
+    backgroundColor: '#4CAF50',
   },
   buttonText: {
-    color: '#fff',
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
   },
   tabContainer: {
     flexDirection: 'row',
-    marginBottom: 16,
+    marginHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#EEEEEE',
   },
   tabButton: {
     flex: 1,
-    padding: 12,
-    borderBottomWidth: 2,
-    borderBottomColor: 'transparent',
+    padding: 16,
     alignItems: 'center',
+    borderRadius: 12,
   },
   activeTab: {
-    borderBottomColor: '#000',
+    backgroundColor: '#000000',
   },
   tabText: {
-    fontWeight: '600',
-    color: '#000',
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#888888',
+  },
+  activeTabText: {
+    color: '#FFFFFF',
   },
   transactionsContainer: {
-    minHeight: 200,
+    margin: 16,
   },
   transactionCard: {
-    flexDirection: 'row',
-    backgroundColor: '#f8f8f8',
-    borderRadius: 8,
-    padding: 12,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 16,
     marginBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#EEEEEE',
   },
   transactionImage: {
     width: 60,
     height: 60,
-    borderRadius: 4,
-    marginRight: 12,
+    borderRadius: 8,
+    marginRight: 16,
   },
   transactionInfo: {
     flex: 1,
   },
   transactionTitle: {
     fontSize: 16,
-    fontWeight: 'bold',
-    color: '#000',
+    fontWeight: '600',
+    color: '#000000',
+    marginBottom: 4,
+  },
+  buyerContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     marginBottom: 4,
   },
   transactionBuyer: {
     fontSize: 14,
-    color: '#666',
-    marginBottom: 2,
+    color: '#666666',
+  },
+  transactionBottom: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   transactionAmount: {
     fontSize: 16,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#4CAF50',
   },
   transactionDate: {
     fontSize: 12,
-    color: '#888',
-    marginTop: 4,
+    color: '#888888',
   },
-  emptyText: {
-    textAlign: 'center',
-    marginTop: 20,
-    color: '#888',
-    fontSize: 16,
+  loadMoreButton: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#000000',
+    marginTop: 8,
+  },
+  loadMoreText: {
+    color: '#000000',
+    fontWeight: '600',
   },
   logoutButton: {
-    marginTop: 20,
-    padding: 12,
-    backgroundColor: '#f1f1f1',
-    borderRadius: 8,
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 30,
+    backgroundColor: '#000000',
+    padding: 16,
+    borderRadius: 12,
+    margin: 16,
+    marginTop: 8,
   },
   logoutText: {
-    color: '#ff4444',
+    color: '#FFFFFF',
     fontWeight: '600',
   },
   loader: {
     marginVertical: 20,
+  },
+  emptyText: {
+    textAlign: 'center',
+    marginTop: 20,
+    color: '#888888',
+    fontSize: 16,
   },
 });
 

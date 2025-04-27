@@ -3,8 +3,9 @@ const router = express.Router();
 const multer = require("multer");
 const path = require("path");
 const User = require("../models/User");
-const authenticateToken = require("../auth.js");
+const authenticateToken = require("../auth");
 const Transaction = require("../models/Transaction");
+const Beat = require("../models/Beat"); // Добавьте этот импорт
 
 // Настройка multer
 const storage = multer.diskStorage({
@@ -21,7 +22,7 @@ const upload = multer({ storage });
 // GET Beats by user ID с пагинацией
 router.get("/profile", authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.userId;
+    const userId = req.user.userId; // Используем userId
 
     // Получаем данные пользователя
     const user = await User.findById(userId).select("username avatar description");
@@ -38,7 +39,7 @@ router.get("/profile", authenticateToken, async (req, res) => {
     res.json({
       user: {
         username: user.username,
-        avatar: user.avatar,  // предполагается, что это поле содержит ссылку на аватарку
+        avatar: user.avatar,
         description: user.description
       },
       beats
@@ -48,10 +49,11 @@ router.get("/profile", authenticateToken, async (req, res) => {
     res.status(500).json({ message: 'Ошибка сервера' });
   }
 });
+
 // Получение профиля
 router.get("/", authenticateToken, async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select("-password");
+    const user = await User.findById(req.user.userId).select("-password"); // Используем userId
     res.json(user);
   } catch (err) {
     res.status(500).json({ error: "Ошибка получения профиля" });
@@ -63,7 +65,7 @@ router.put("/photo", authenticateToken, upload.single("photo"), async (req, res)
   try {
     const userPhoto = `assets/${req.file.filename}`;
     const user = await User.findByIdAndUpdate(
-      req.user.id,
+      req.user.userId, // Используем userId
       { userPhoto },
       { new: true }
     ).select("-password");
@@ -79,7 +81,7 @@ router.put("/description", authenticateToken, async (req, res) => {
   try {
     const { description } = req.body;
     const user = await User.findByIdAndUpdate(
-      req.user.id,
+      req.user.userId, // Используем userId
       { description },
       { new: true }
     ).select("-password");
@@ -98,7 +100,7 @@ router.put("/balance", authenticateToken, async (req, res) => {
       return res.status(400).json({ error: "Некорректная сумма" });
     }
 
-    const user = await User.findById(req.user.id);
+    const user = await User.findById(req.user.userId); // Используем userId
     user.balance = (user.balance || 0) + parseFloat(amount);
     await user.save();
 
@@ -110,45 +112,71 @@ router.put("/balance", authenticateToken, async (req, res) => {
 
 router.get("/transactions", authenticateToken, async (req, res) => {
   try {
-    const userId = req.user.id;
+    const userId = req.user.userId; // Используем userId
+    const { type, page = 1, limit = 5 } = req.query;
+    const skip = (page - 1) * limit;
 
-    // 1) Покупки: где текущий юзер — buyer
-    const purchaseTxs = await Transaction
-      .find({ buyer: userId })
-      .populate("beat", "title imageUrl price")
-      .sort({ createdAt: -1 });
+    const query = type === 'purchases' 
+      ? { buyer: userId } 
+      : { seller: userId };
 
+    const transactions = await Transaction.find(query)
+      .populate([
+        {
+          path: "beat",
+          select: "title imageUrl audioUrl price description tags user createdAt",
+          populate: { path: "user", select: "username" }
+        },
+        ...(type === 'sales' ? [{ path: "buyer", select: "username" }] : [])
+      ])
+      .sort({ createdAt: -1 })
+      .skip(parseInt(skip))
+      .limit(parseInt(limit));
 
-    // 2) Продажи: где текущий юзер — seller
-    const salesTxs = await Transaction
-      .find({ seller: userId })
-      .populate("beat", "title imageUrl price")
-      .populate("buyer", "username")   // подтянем имя покупателя
-      .sort({ createdAt: -1 });
+    const total = await Transaction.countDocuments(query);
 
+    const formattedTransactions = transactions.map(t => {
+      const safeDate = (date) => {
+        try {
+          if (!date) return new Date().toISOString();
+          if (typeof date === 'string' && date.includes('ObjectId')) {
+            return new Date().toISOString();
+          }
+          const parsed = new Date(date);
+          return isNaN(parsed.getTime()) ? new Date().toISOString() : parsed.toISOString();
+        } catch {
+          return new Date().toISOString();
+        }
+      };
 
-    // Формируем отдачу
-    const purchases = purchaseTxs.map(t => ({
-      id: t._id,
-      beatTitle: t.beat.title,
-      beatImage: t.beat.imageUrl,
-      amount: t.amount,
-      date: t.date,
-    }));
-    const sales = salesTxs.map(t => ({
-      id: t._id,
-      beatTitle: t.beat.title,
-      beatImage: t.beat.imageUrl,
-      buyerUsername: t.buyer.username,
-      amount: t.amount,
-      date: t.date,
-    }));
+      return {
+        id: t._id.toString(),
+        beatId: t.beat?._id.toString(),
+        beatTitle: t.beat?.title || 'Untitled',
+        beatImage: t.beat?.imageUrl || '',
+        beatAudioUrl: t.beat?.audioUrl || '',
+        beatPrice: t.beat?.price || 0,
+        beatDescription: t.beat?.description || '',
+        beatTags: t.beat?.tags || [],
+        beatAuthor: t.beat?.user?.username || 'Unknown',
+        amount: t.amount,
+        date: safeDate(t.date),
+        ...(type === 'sales' && { 
+          buyerUsername: t.buyer?.username || 'Unknown' 
+        })
+      };
+    });
 
+    res.json({
+      transactions: formattedTransactions,
+      total,
+      page: parseInt(page),
+      totalPages: Math.ceil(total / limit)
+    });
 
-    res.json({ purchases, sales });
   } catch (err) {
-    console.error("Ошибка получения транзакций:", err);
-    res.status(500).json({ error: "Ошибка сервера" });
+    console.error("Transaction error:", err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
