@@ -4,6 +4,8 @@ import { TextInput, Button, Title } from 'react-native-paper';
 import { AuthContext } from './AuthContext';
 import config from './config';
 import { pick } from '@react-native-documents/picker';
+import { Chip } from 'react-native-paper';
+
 
 const SERVER = `http://${config.serverIP}:5000`;
 
@@ -206,6 +208,19 @@ const AddBeatScreen: React.FC<any> = ({ navigation }) => {
         style={styles.input}
         mode="outlined"
       />
+<ScrollView 
+  horizontal 
+  showsHorizontalScrollIndicator={false} 
+  contentContainerStyle={styles.tagsContainer}
+>
+  {tags.split(',').map((tag, index) => (
+    tag.trim() ? (
+      <Chip key={index} style={styles.tag} textStyle={styles.tagText}>
+        {tag.trim()}
+      </Chip>
+    ) : null
+  ))}
+</ScrollView>
 
       <Button onPress={handleImagePicker} mode="contained" style={styles.button}>
         Select Image
@@ -249,6 +264,19 @@ const styles = StyleSheet.create({
   button: { marginTop: 10, backgroundColor: '#000' },
   submitButton: { marginTop: 20, backgroundColor: '#000' },
   buttonContent: { paddingVertical: 10 },
+  tagsContainer: {
+  flexDirection: 'row',
+  flexWrap: 'wrap',
+  marginBottom: 15,
+},
+tag: {
+  margin: 4,
+  backgroundColor: '#e0e0e0',
+},
+tagText: {
+  color: '#000',
+},
+
 });
 
 export default AddBeatScreen;
