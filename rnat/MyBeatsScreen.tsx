@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   View,
   Text,
@@ -102,7 +103,12 @@ const MyBeatsScreen = () => {
       setRefreshing(false);
     }
   }, [searchQuery]);
-
+useFocusEffect(
+  useCallback(() => {
+    fetchBeats(1);
+  }, [fetchBeats])
+);
+  
   useEffect(() => {
     fetchBeats(1);
   }, [fetchBeats]);

@@ -10,9 +10,12 @@ const Transaction = require("../models/Transaction");
 const Rating = require('../models/Rating'); 
 const Comment = require("../models/Comment");
 const SECRET_KEY = process.env.JWT_SECRET;
+const fs = require('fs');
+const util = require('util');
+const unlinkAsync = util.promisify(fs.unlink);
 
 if (!SECRET_KEY) {
-    console.error("❌ JWT_SECRET не определён в переменных окружения!");
+    console.error("JWT_SECRET не определён в переменных окружения!");
 }
 
 const authMiddleware = (req, res, next) => {
@@ -36,6 +39,35 @@ const authMiddleware = (req, res, next) => {
         return res.status(401).json({ message: "Неверный или просроченный токен" });
     }
 };
+
+// Получить 10 последних битов по дате создания (новые сначала)
+router.get('/recent', async (req, res) => {
+  try {
+    const recentBeats = await Beat.find()
+      .sort({ createdAt: -1 }) // Сортировка по дате создания (новые сначала)
+      .limit(10) // Ограничение 10 записей
+      .populate('user', 'username'); // Добавляем информацию о пользователе
+
+    // Добавляем информацию о рейтингах
+    const beatsWithRatings = await Promise.all(recentBeats.map(async (beat) => {
+      const ratings = await Rating.find({ beat: beat._id });
+      const averageRating = ratings.length > 0 
+        ? (ratings.reduce((sum, r) => sum + r.value, 0) / ratings.length).toFixed(1)
+        : null;
+      
+      return {
+        ...beat.toObject(),
+        averageRating: averageRating ? parseFloat(averageRating) : null,
+        ratingsCount: ratings.length
+      };
+    }));
+
+    res.json(beatsWithRatings);
+  } catch (error) {
+    console.error('Ошибка при получении последних битов:', error);
+    res.status(500).json({ error: 'Ошибка сервера' });
+  }
+});
 // Конфигурация для загрузки изображений и аудиофайлов
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -179,7 +211,32 @@ router.get('/popular/:period', async (req, res) => {
     }
 });
 
+router.get('/download/:filename', authMiddleware, async (req, res) => {
+  try {
+    const filename = req.params.filename;
+    const filePath = path.join(__dirname, '../assets/audio', filename);
+    
+    // Проверяем, есть ли у пользователя этот бит в покупках
+    const hasPurchased = await Transaction.findOne({
+      buyer: req.user.userId,
+      'beat.audioUrl': { $regex: filename }
+    }).populate('beat');
 
+    if (!hasPurchased) {
+      return res.status(403).json({ error: "You haven't purchased this beat" });
+    }
+
+    // Отправляем файл для скачивания
+    if (fs.existsSync(filePath)) {
+      res.download(filePath, filename);
+    } else {
+      res.status(404).json({ error: "File not found" });
+    }
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 router.post("/rate/:beatId", authMiddleware, async (req, res) => {
   const userId = req.user.userId;
   const beatId = req.params.beatId;
@@ -572,7 +629,7 @@ router.delete("/:id", authMiddleware, async (req, res) => {
       }
       
       if (beat.imageUrl) {
-        const imagePath = path.join(__dirname, '../assets/image', path.basename(beat.imageUrl));
+        const imagePath = path.join(__dirname, '../assets/images', path.basename(beat.imageUrl));
         if (fs.existsSync(imagePath)) {
           fs.unlinkSync(imagePath);
         }
@@ -603,4 +660,76 @@ router.delete("/:id", authMiddleware, async (req, res) => {
     });
   }
 });
+
+
+
+router.post("/delete-image", authMiddleware, async (req, res) => {
+  try {
+    const { imageUrl } = req.body;
+    const userId = req.user.userId;
+
+    if (!imageUrl) {
+      return res.status(400).json({ 
+        success: false,
+        error: "Missing imageUrl", 
+        message: "imageUrl обязателен"
+      });
+    }
+
+    const fileName = path.basename(imageUrl);
+    const filePath = path.join(__dirname, "../assets/images", fileName);
+
+    const beat = await Beat.findOne({ imageUrl });
+    if (!beat) {
+      return res.status(404).json({ 
+        success: false,
+        error: "Beat not found", 
+        message: "Бит с этим изображением не найден" 
+      });
+    }
+
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        error: "User not found", 
+        message: "Пользователь не найден" 
+      });
+    }
+
+    const isOwner = beat.user.toString() === userId;
+    const isAdmin = user.username === "admin0";
+
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ 
+        success: false,
+        error: "Forbidden", 
+        message: "У вас нет прав на удаление этого изображения" 
+      });
+    }
+
+    if (fs.existsSync(filePath)) {
+      await unlinkAsync(filePath);
+      return res.json({ 
+        success: true, 
+        message: "Файл успешно удалён" 
+      });
+    } else {
+      return res.status(404).json({ 
+        success: false,
+        error: "File not found", 
+        message: "Файл не найден по указанному пути" 
+      });
+    }
+
+  } catch (error) {
+    console.error("Ошибка при удалении изображения:", error);
+    return res.status(500).json({ 
+      success: false,
+      error: "Server error", 
+      message: "Произошла ошибка на сервере при удалении изображения" 
+    });
+  }
+});
+
 module.exports = router;

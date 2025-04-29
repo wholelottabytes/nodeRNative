@@ -48,7 +48,7 @@ const AddBeatScreen: React.FC<any> = ({ navigation }) => {
       setImageFile({ uri: file.uri, name: uniqueName, type: file.type });
     } catch (err: any) {
       if (err.code !== 'OPERATION_CANCELED') {
-        Alert.alert('Ошибка', 'Не удалось выбрать изображение');
+        Alert.alert('Error', 'Failed to select image');
       }
     }
   };
@@ -61,112 +61,112 @@ const AddBeatScreen: React.FC<any> = ({ navigation }) => {
       setAudioFile({ uri: file.uri, name: uniqueName, type: file.type });
     } catch (err: any) {
       if (err.code !== 'OPERATION_CANCELED') {
-        Alert.alert('Ошибка', 'Не удалось выбрать аудио');
+        Alert.alert('Error', 'Failed to select audio');
       }
     }
   };
 
-const handleSubmit = async () => {
-  if (!title || !author || !price || !description || !tags || !imageFile || !audioFile) {
-    Alert.alert('Ошибка', 'Заполните все поля и выберите файлы');
-    return;
-  }
-
-  setLoading(true);
-  try {
-    const token = user?.token;
-
-    // Загрузить изображение
-    const imgData = new FormData();
-    imgData.append('image', {
-      uri: imageFile.uri,
-      name: imageFile.name ?? 'photo.jpg',
-      type: imageFile.type ?? 'image/jpeg',
-    } as any);
-
-    const imgRes = await fetch(`${SERVER}/beats/upload-image`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: imgData,
-    });
-
-    const imgText = await imgRes.text(); // Получаем ответ как текст
-    console.log('Image upload response:', imgText); // Печатаем ответ сервера
-
-    if (!imgRes.ok) {
-      throw new Error('Ошибка загрузки изображения');
+  const handleSubmit = async () => {
+    if (!title || !author || !price || !description || !tags || !imageFile || !audioFile) {
+      Alert.alert('Error', 'Please fill in all fields and select files');
+      return;
     }
-    const imgJson = JSON.parse(imgText); // Пытаемся распарсить JSON, если ответ в формате JSON
-    console.log('Image JSON:', imgJson);
 
-    // Загрузить аудио
-    const audioData = new FormData();
-    audioData.append('audio', {
-      uri: audioFile.uri,
-      name: audioFile.name ?? 'audio.mp3',
-      type: audioFile.type ?? 'audio/mpeg',
-    } as any);
+    setLoading(true);
+    try {
+      const token = user?.token;
 
-    const audioRes = await fetch(`${SERVER}/beats/upload-audio`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-      body: audioData,
-    });
+      // Загрузить изображение
+      const imgData = new FormData();
+      imgData.append('image', {
+        uri: imageFile.uri,
+        name: imageFile.name ?? 'photo.jpg',
+        type: imageFile.type ?? 'image/jpeg',
+      } as any);
 
-    const audioText = await audioRes.text(); // Получаем ответ как текст
-    console.log('Audio upload response:', audioText); // Печатаем ответ сервера
+      const imgRes = await fetch(`${SERVER}/beats/upload-image`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: imgData,
+      });
 
-    if (!audioRes.ok) {
-      throw new Error('Ошибка загрузки аудио');
+      const imgText = await imgRes.text(); // Получаем ответ как текст
+      console.log('Image upload response:', imgText); // Печатаем ответ сервера
+
+      if (!imgRes.ok) {
+        throw new Error('Error uploading image');
+      }
+      const imgJson = JSON.parse(imgText); // Пытаемся распарсить JSON, если ответ в формате JSON
+      console.log('Image JSON:', imgJson);
+
+      // Загрузить аудио
+      const audioData = new FormData();
+      audioData.append('audio', {
+        uri: audioFile.uri,
+        name: audioFile.name ?? 'audio.mp3',
+        type: audioFile.type ?? 'audio/mpeg',
+      } as any);
+
+      const audioRes = await fetch(`${SERVER}/beats/upload-audio`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: audioData,
+      });
+
+      const audioText = await audioRes.text(); // Получаем ответ как текст
+      console.log('Audio upload response:', audioText); // Печатаем ответ сервера
+
+      if (!audioRes.ok) {
+        throw new Error('Error uploading audio');
+      }
+      const audioJson = JSON.parse(audioText); // Пытаемся распарсить JSON, если ответ в формате JSON
+      console.log('Audio JSON:', audioJson);
+
+      // Создать бит
+      const newBeat = {
+        title,
+        author,
+        price: Number(price),
+        description,
+        tags: tags.split(',').map(t => t.trim()),
+        imageUrl: imgJson.imageUrl,
+        audioUrl: audioJson.audioUrl,
+        user: user!._id,
+      };
+
+      const beatRes = await fetch(`${SERVER}/beats/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(newBeat),
+      });
+
+      const beatText = await beatRes.text();
+      console.log('Beat creation response:', beatText); // Печатаем ответ сервера
+
+      if (!beatRes.ok) {
+        throw new Error('Error creating beat');
+      }
+      const beatJson = JSON.parse(beatText);
+      console.log('Beat JSON:', beatJson);
+
+      Alert.alert('Success', `Beat created, ID: ${beatJson._id}`);
+      navigation.navigate('Main', { screen: 'Home' });
+    } catch (error: any) {
+      Alert.alert('Error', error.message);
+    } finally {
+      setLoading(false);
     }
-    const audioJson = JSON.parse(audioText); // Пытаемся распарсить JSON, если ответ в формате JSON
-    console.log('Audio JSON:', audioJson);
-
-    // Создать бит
-    const newBeat = {
-      title,
-      author,
-      price: Number(price),
-      description,
-      tags: tags.split(',').map(t => t.trim()),
-      imageUrl: imgJson.imageUrl,
-      audioUrl: audioJson.audioUrl,
-      user: user!._id,
-    };
-
-    const beatRes = await fetch(`${SERVER}/beats/`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(newBeat),
-    });
-
-    const beatText = await beatRes.text();
-    console.log('Beat creation response:', beatText); // Печатаем ответ сервера
-
-    if (!beatRes.ok) {
-      throw new Error('Ошибка создания бита');
-    }
-    const beatJson = JSON.parse(beatText);
-    console.log('Beat JSON:', beatJson);
-
-    Alert.alert('Успех', `Бит создан, ID: ${beatJson._id}`);
-    navigation.navigate('Main', { screen: 'Home' });
-  } catch (error: any) {
-    Alert.alert('Ошибка', error.message);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
-      <Title style={styles.title}>Добавить новый бит</Title>
+      <Title style={styles.title}>Add New Beat</Title>
 
       <TextInput
-        label="Название"
+        label="Title"
         value={title}
         onChangeText={setTitle}
         style={styles.input}
@@ -174,7 +174,7 @@ const handleSubmit = async () => {
       />
 
       <TextInput
-        label="Автор"
+        label="Author"
         value={author}
         style={styles.input}
         mode="outlined"
@@ -182,7 +182,7 @@ const handleSubmit = async () => {
       />
 
       <TextInput
-        label="Цена"
+        label="Price"
         value={price}
         onChangeText={setPrice}
         style={styles.input}
@@ -191,7 +191,7 @@ const handleSubmit = async () => {
       />
 
       <TextInput
-        label="Описание"
+        label="Description"
         value={description}
         onChangeText={setDescription}
         style={styles.input}
@@ -200,29 +200,29 @@ const handleSubmit = async () => {
       />
 
       <TextInput
-        label="Теги (через запятую)"
+        label="Tags (comma separated)"
         value={tags}
         onChangeText={setTags}
         style={styles.input}
         mode="outlined"
       />
 
-      <Button onPress={handleImagePicker} mode="outlined" style={styles.button}>
-        Выбрать изображение
+      <Button onPress={handleImagePicker} mode="contained" style={styles.button}>
+        Select Image
       </Button>
       <TextInput
-        label="Выбранное изображение"
+        label="Selected Image"
         value={imageFile?.name || ''}
         style={styles.input}
         mode="outlined"
         editable={false}
       />
 
-      <Button onPress={handleAudioPicker} mode="outlined" style={styles.button}>
-        Выбрать аудио
+      <Button onPress={handleAudioPicker} mode="contained" style={styles.button}>
+        Select Audio
       </Button>
       <TextInput
-        label="Выбранное аудио"
+        label="Selected Audio"
         value={audioFile?.name || ''}
         style={styles.input}
         mode="outlined"
@@ -233,20 +233,21 @@ const handleSubmit = async () => {
         mode="contained"
         onPress={handleSubmit}
         loading={loading}
-        style={styles.button}
+        style={styles.submitButton}
         contentStyle={styles.buttonContent}
       >
-        Создать бит
+        Create Beat
       </Button>
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flexGrow: 1, padding: 20, backgroundColor: '#f2f2f2' },
-  title: { textAlign: 'center', marginBottom: 20, fontSize: 24, color: '#6200ee' },
+  container: { flexGrow: 1, padding: 20, backgroundColor: '#fff' },
+  title: { textAlign: 'center', marginBottom: 20, fontSize: 24, color: 'black' },
   input: { marginBottom: 15, backgroundColor: '#fff' },
-  button: { marginTop: 10 },
+  button: { marginTop: 10, backgroundColor: '#000' },
+  submitButton: { marginTop: 20, backgroundColor: '#000' },
   buttonContent: { paddingVertical: 10 },
 });
 

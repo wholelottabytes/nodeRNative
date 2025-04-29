@@ -14,6 +14,9 @@ import {
   Platform
 } from 'react-native';
 import axios from 'axios';
+import RNFS from 'react-native-fs';
+
+import { PermissionsAndroid } from 'react-native';
 import { launchImageLibrary } from 'react-native-image-picker';
 import { useNavigation } from '@react-navigation/native';
 import config from './config';
@@ -105,6 +108,70 @@ const ProfileScreen = () => {
     }
   }, [user]);
 
+const downloadBeat = async (audioUrl: string, title: string) => {
+  try {
+    // Проверяем разрешения
+    const hasPermission = await requestStoragePermission();
+    if (!hasPermission) {
+      Alert.alert('Permission Denied', 'Cannot download without storage permission');
+      return;
+    }
+
+    // Получаем имя файла из URL
+    const filename = audioUrl.split('/').pop() || `${title.replace(/\s+/g, '_')}.mp3`;
+    
+    // Путь для сохранения файла
+    let downloadDest;
+    if (Platform.OS === 'android') {
+      // Для Android используем Downloads directory
+      downloadDest = `${RNFS.DownloadDirectoryPath}/${filename}`;
+    } else {
+      // Для iOS используем Document directory
+      downloadDest = `${RNFS.DocumentDirectoryPath}/${filename}`;
+    }
+
+    const fromUrl = `${SERVER_URL}/${audioUrl}`;
+
+    const options = {
+      fromUrl,
+      toFile: downloadDest,
+      // Для Android 10+ нужно добавить этот параметр
+      ...(Platform.OS === 'android' && {
+        addAndroidDownloads: {
+          useDownloadManager: true,
+          notification: true,
+          title: filename,
+          description: 'Beat download',
+          path: downloadDest,
+          mime: 'audio/mpeg',
+        }
+      })
+    };
+
+    const result = await RNFS.downloadFile(options).promise;
+
+    if (result.statusCode === 200) {
+      Alert.alert('Success', `Beat downloaded successfully to ${downloadDest}`);
+    } else {
+      throw new Error(`Failed with status ${result.statusCode}`);
+    }
+  } catch (error: unknown) {
+  console.error('Download error:', error);
+
+  let errorMessage = 'Failed to download beat';
+
+  if (error instanceof Error) {
+    errorMessage = error.message;
+  } else if (typeof error === 'string') {
+    errorMessage = error;
+  }
+
+  Alert.alert('Download Failed', errorMessage);
+}
+};
+
+
+
   const fetchTransactions = useCallback(async (tab: 'purchases' | 'sales', pageNum = 1) => {
     if (!user) return;
     try {
@@ -138,6 +205,43 @@ const ProfileScreen = () => {
     }
   }, [user]);
 
+const requestStoragePermission = async () => {
+  if (Platform.OS === 'android') {
+    try {
+      // Для Android 13 (API 33) и выше
+      if (Platform.Version >= 33) {
+        const readPermission = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.READ_MEDIA_AUDIO
+        );
+        return readPermission === PermissionsAndroid.RESULTS.GRANTED;
+      }
+      // Для Android 11 (API 30) до Android 12 (API 32)
+      else if (Platform.Version >= 30) {
+        const readPermission = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE
+        );
+        return readPermission === PermissionsAndroid.RESULTS.GRANTED;
+      }
+      // Для Android 10 (API 29) и ниже
+      else {
+        const writePermission = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE
+        );
+        const readPermission = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE
+        );
+        return (
+          writePermission === PermissionsAndroid.RESULTS.GRANTED &&
+          readPermission === PermissionsAndroid.RESULTS.GRANTED
+        );
+      }
+    } catch (err) {
+      console.warn(err);
+      return false;
+    }
+  }
+  return true; 
+};
   const loadData = useCallback(async () => {
     await Promise.all([
       fetchProfile(),
@@ -234,41 +338,69 @@ const ProfileScreen = () => {
     navigation.navigate('BeatDetails', { beat });
   };
 
-  const renderTransaction = (item: Transaction) => {
-    const transactionDate = parseDateSafe(item.date);
-    const formattedDate = transactionDate.toLocaleDateString('en-US', {
-      day: 'numeric',
-      month: 'short',
-      year: 'numeric'
-    });
+ const renderTransaction = (item: Transaction) => {
+  const transactionDate = parseDateSafe(item.date);
+  const formattedDate = transactionDate.toLocaleDateString('en-US', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric'
+  });
 
-    return (
-      <TouchableOpacity 
-        style={styles.transactionCard}
-        key={item.id}
-        onPress={() => handleBeatPress(item)}
-      >
-        <Image 
-          source={{ uri: item.beatImage ? `${SERVER_URL}/${item.beatImage}` : 'https://via.placeholder.com/150' }} 
-          style={styles.transactionImage}
-        />
-        <View style={styles.transactionInfo}>
-          <Text style={styles.transactionTitle} numberOfLines={1}>{item.beatTitle}</Text>
-          
-          {item.buyerUsername && (
-            <View style={styles.buyerContainer}>
-              <Text style={styles.transactionBuyer}>Buyer: {item.buyerUsername}</Text>
-            </View>
-          )}
-          
-          <View style={styles.transactionBottom}>
-            <Text style={styles.transactionAmount}>${item.amount.toFixed(2)}</Text>
-            <Text style={styles.transactionDate}>{formattedDate}</Text>
-          </View>
-        </View>
-      </TouchableOpacity>
+  const handleLongPress = () => {
+    Alert.alert(
+      'Download Beat',
+      'Are you sure you want to download this beat?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Download',
+          onPress: async () => {
+            const hasPermission = await requestStoragePermission();
+            if (!hasPermission) {
+              Alert.alert('Permission Denied', 'Cannot download without storage permission');
+              return;
+            }
+            downloadBeat(item.beatAudioUrl, item.beatTitle);
+          }
+        }
+      ]
     );
   };
+
+  return (
+    <TouchableOpacity
+      style={styles.transactionCard}
+      key={item.id}
+      onPress={() => handleBeatPress(item)}
+      onLongPress={activeTab === 'purchases' ? handleLongPress : undefined}
+    >
+      <Image 
+        source={{ uri: item.beatImage ? `${SERVER_URL}/${item.beatImage}` : 'https://via.placeholder.com/150' }} 
+        style={styles.transactionImage}
+      />
+      <View style={styles.transactionInfo}>
+        <Text style={styles.transactionTitle} numberOfLines={1}>
+          {item.beatTitle}
+        </Text>
+
+        {item.buyerUsername && (
+          <View style={styles.buyerContainer}>
+            <Text style={styles.transactionBuyer}>Buyer: {item.buyerUsername}</Text>
+          </View>
+        )}
+
+        <View style={styles.transactionBottom}>
+          <Text style={styles.transactionAmount}>${item.amount.toFixed(2)}</Text>
+          <Text style={styles.transactionDate}>{formattedDate}</Text>
+        </View>
+
+        {activeTab === 'purchases' && (
+          <Text style={styles.downloadHint}>Long tap to download</Text>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+};
 
   if (!auth || !user) {
     return (
@@ -507,6 +639,13 @@ const styles = StyleSheet.create({
     color: '#000000',
     backgroundColor: '#FFFFFF',
   },
+  downloadHint: {
+  marginTop: 4,
+  fontSize: 12,
+  color: 'gray',
+  fontStyle: 'italic',
+},
+
   actionButton: {
     backgroundColor: '#000000',
     padding: 16,
@@ -532,6 +671,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#EEEEEE',
   },
+  longTapText: {
+  fontSize: 12,
+  color: 'gray',
+  marginTop: 4,
+  fontStyle: 'italic',
+},
   tabButton: {
     flex: 1,
     padding: 16,

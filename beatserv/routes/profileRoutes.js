@@ -6,6 +6,7 @@ const User = require("../models/User");
 const authenticateToken = require("../auth");
 const Transaction = require("../models/Transaction");
 const Beat = require("../models/Beat"); // Добавьте этот импорт
+const fs = require('fs');
 
 // Настройка multer
 const storage = multer.diskStorage({
@@ -63,19 +64,29 @@ router.get("/", authenticateToken, async (req, res) => {
 // Обновление фото профиля
 router.put("/photo", authenticateToken, upload.single("photo"), async (req, res) => {
   try {
-    const userPhoto = `assets/${req.file.filename}`;
-    const user = await User.findByIdAndUpdate(
-      req.user.userId, // Используем userId
-      { userPhoto },
-      { new: true }
-    ).select("-password");
+    const user = await User.findById(req.user.userId);
+
+    // Удаляем старое фото, если оно есть
+    if (user.userPhoto) {
+      const oldPhotoPath = path.join(__dirname, "..", user.userPhoto);
+      fs.unlink(oldPhotoPath, (err) => {
+        if (err) {
+          console.error("Ошибка при удалении старого фото:", err);
+        }
+      });
+    }
+
+    // Обновляем ссылку на новое фото
+    const newPhotoPath = `assets/${req.file.filename}`;
+    user.userPhoto = newPhotoPath;
+    await user.save();
 
     res.json(user);
   } catch (err) {
+    console.error('Ошибка обновления фото профиля:', err);
     res.status(500).json({ error: "Ошибка обновления фото профиля" });
   }
 });
-
 // Обновление/добавление описания
 router.put("/description", authenticateToken, async (req, res) => {
   try {
