@@ -73,6 +73,11 @@ const AddBeatScreen: React.FC<any> = ({ navigation }) => {
       Alert.alert('Error', 'Please fill in all fields and select files');
       return;
     }
+    const priceValue = Number(price);
+    if (isNaN(priceValue) || priceValue < 0) {
+      Alert.alert('Error', 'Price must be a valid positive number');
+      return;
+    }
 
     setLoading(true);
     try {

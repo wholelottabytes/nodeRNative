@@ -56,7 +56,11 @@ const EditBeatScreen: React.FC<any> = () => {
     Alert.alert('Error', 'Please fill in all required fields');
     return;
   }
-
+  const priceValue = Number(price);
+    if (isNaN(priceValue) || priceValue < 0) {
+      Alert.alert('Error', 'Price must be a valid positive number');
+      return;
+    }
   setLoading(true);
   try {
     const token = user?.token;
