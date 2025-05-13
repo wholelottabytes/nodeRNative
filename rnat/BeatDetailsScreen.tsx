@@ -540,18 +540,21 @@ const handleDeleteBeat = async () => {
                           multiline
                         />
                         <View style={styles.editButtons}>
+                          
                           <TouchableOpacity 
                             onPress={() => handleEditComment(comment._id)}
                             style={styles.saveEditButton}
                           >
                             <Check width={18} height={18} color="#fff" />
                           </TouchableOpacity>
+                          
                           <TouchableOpacity 
                             onPress={cancelEditing}
                             style={styles.cancelEditButton}
                           >
                             <X width={18} height={18} color="#fff" />
                           </TouchableOpacity>
+                          
                         </View>
                       </>
                     ) : (
@@ -570,7 +573,7 @@ const handleDeleteBeat = async () => {
                       )}
                       
                       {/* Edit button - show for comment owner or beat owner (admin can already delete) */}
-                      {(user?.username === comment.username || (isBeatOwner && !isAdmin)) && (
+                      {(user?.username === comment.username) && (
                         <TouchableOpacity 
                           onPress={() => startEditingComment(comment)}
                           style={styles.commentActionButton}

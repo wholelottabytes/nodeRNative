@@ -155,7 +155,7 @@ const AddBeatScreen: React.FC<any> = ({ navigation }) => {
       console.log('Beat JSON:', beatJson);
 
       Alert.alert('Success', `Beat created, ID: ${beatJson._id}`);
-      navigation.navigate('Main', { screen: 'Home' });
+      navigation.goBack();
     } catch (error: any) {
       Alert.alert('Error', error.message);
     } finally {

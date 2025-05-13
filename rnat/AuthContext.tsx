@@ -84,7 +84,6 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     console.log('User при логине:', user);
     await AsyncStorage.setItem('token', token);
     await AsyncStorage.setItem('user', JSON.stringify(user));
-
     setIsAuthenticated(true);
     setUser(user);
 };

@@ -1,12 +1,11 @@
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { RouteProp } from '@react-navigation/native';
 
-// Определите типы для параметров каждого экрана
-// Вынеси общий тип Beat
+
 export type Beat = {
   _id: string;
-  imageUrl: string | null;  // Разрешаем null
-  audioUrl: string | null;  // Разрешаем null
+  imageUrl: string | null;
+  audioUrl: string | null;  
   title: string;
   author: string;
   price: number;
@@ -22,7 +21,6 @@ export type Beat = {
 };
 
 
-// Теперь используй его в RootStackParamList
 export type RootStackParamList = {
   Login: undefined;
   Register: undefined;
@@ -30,7 +28,7 @@ export type RootStackParamList = {
   MyBeats: undefined;
   EditBeat: { beat: any };
   AddBeat: undefined;
-  BeatDetails: { beat: Beat }; // вот он
+  BeatDetails: { beat: Beat };
   UserProfile: { username: string };
   
 };
